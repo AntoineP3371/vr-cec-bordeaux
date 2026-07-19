@@ -166,16 +166,16 @@ function dessiner() {
   ctx.clearRect(0, 0, 512, 310);
 
   if (sessionComplete) {
-    // Fond vert bravo
-    ctx.fillStyle = 'rgba(10,60,10,0.95)'; rr(ctx,0,0,512,310,20); ctx.fill();
-    ctx.fillStyle = '#27ae60'; ctx.font = 'bold 40px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('BRAVO !', 256, 80);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 62px monospace';
-    ctx.fillText(formatTemps(chrono.cumul), 256, 175);
-    ctx.fillStyle = '#aaa'; ctx.font = '20px sans-serif';
-    ctx.fillText(playerName || '', 256, 225);
-    ctx.fillStyle = '#27ae60'; ctx.font = '17px sans-serif';
-    ctx.fillText('Retour au classement...', 256, 275);
+    // Fond festif
+    ctx.fillStyle = 'rgba(10,45,20,0.95)'; rr(ctx,0,0,512,310,20); ctx.fill();
+    ctx.fillStyle = '#ffd700'; ctx.font = 'bold 46px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('BRAVO ' + (playerName || '').toUpperCase() + ' !', 256, 78);
+    ctx.fillStyle = '#fff'; ctx.font = '24px sans-serif';
+    ctx.fillText('tu as mis', 256, 128);
+    ctx.fillStyle = '#27ae60'; ctx.font = 'bold 64px monospace';
+    ctx.fillText(formatTemps(chrono.cumul), 256, 205);
+    ctx.fillStyle = '#aaa'; ctx.font = '17px sans-serif';
+    ctx.fillText('Retour au classement...', 256, 268);
   } else {
     // Fond normal
     ctx.fillStyle = 'rgba(20,20,20,0.93)'; rr(ctx,0,0,512,310,20); ctx.fill();
@@ -264,6 +264,84 @@ var matFantome = new THREE.MeshBasicMaterial({
   color: 0x00e5ff, transparent: true, opacity: 0.35, depthWrite: false
 });
 
+// --- Feu d'artifice (particules) ---
+var carCentre  = new THREE.Vector3();  // centre de la voiture (local a anchor)
+var feux       = [];                    // gerbes actives
+var feuxActif  = false;                 // sequence de lancement en cours
+
+// Cree une gerbe de particules a partir d'un point monde
+function creerGerbe(origine) {
+  var N   = 140;
+  var geo = new THREE.BufferGeometry();
+  var pos = new Float32Array(N * 3);
+  var col = new Float32Array(N * 3);
+  var vel = [];
+  var teinte = new THREE.Color().setHSL(Math.random(), 1, 0.6);
+  for (var i = 0; i < N; i++) {
+    pos[i*3] = origine.x; pos[i*3+1] = origine.y; pos[i*3+2] = origine.z;
+    var theta = Math.random() * Math.PI * 2;
+    var phi   = Math.acos(2 * Math.random() - 1);
+    var vit   = 0.5 + Math.random() * 0.6;
+    vel.push(new THREE.Vector3(
+      Math.sin(phi) * Math.cos(theta) * vit,
+      Math.cos(phi) * vit,
+      Math.sin(phi) * Math.sin(theta) * vit
+    ));
+    col[i*3] = teinte.r; col[i*3+1] = teinte.g; col[i*3+2] = teinte.b;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
+  var mat = new THREE.PointsMaterial({
+    size: 0.025, vertexColors: true, transparent: true, opacity: 1,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  var pts = new THREE.Points(geo, mat);
+  scene.add(pts);
+  feux.push({ pts: pts, vel: vel, age: 0, ttl: 1.8 });
+}
+
+// Lance une sequence de gerbes depuis le dessus de la voiture
+function lancerFeuxArtifice() {
+  if (feuxActif) return;
+  feuxActif = true;
+  var origine = anchor.localToWorld(carCentre.clone());
+  origine.y += 0.15;
+  for (var b = 0; b < 8; b++) {
+    (function (delai) {
+      setTimeout(function () {
+        var o = origine.clone();
+        o.x += (Math.random() - 0.5) * 0.5;
+        o.y += Math.random() * 0.35;
+        o.z += (Math.random() - 0.5) * 0.5;
+        creerGerbe(o);
+      }, delai);
+    })(b * 500);
+  }
+}
+
+// Met a jour les particules (dt en secondes)
+function majFeux(dt) {
+  for (var i = feux.length - 1; i >= 0; i--) {
+    var f = feux[i];
+    f.age += dt;
+    var p = f.pts.geometry.attributes.position.array;
+    for (var j = 0; j < f.vel.length; j++) {
+      f.vel[j].y -= 0.7 * dt; // gravite
+      p[j*3]   += f.vel[j].x * dt;
+      p[j*3+1] += f.vel[j].y * dt;
+      p[j*3+2] += f.vel[j].z * dt;
+    }
+    f.pts.geometry.attributes.position.needsUpdate = true;
+    f.pts.material.opacity = Math.max(0, 1 - f.age / f.ttl);
+    if (f.age >= f.ttl) {
+      scene.remove(f.pts);
+      f.pts.geometry.dispose();
+      f.pts.material.dispose();
+      feux.splice(i, 1);
+    }
+  }
+}
+
 function ajusterTaille(objet, tailleCible) {
   var box = new THREE.Box3().setFromObject(objet);
   var taille = new THREE.Vector3();
@@ -305,10 +383,11 @@ function chargerVoiture() {
       });
     });
 
-    // Centroide des positions assemblees
+    // Centroide des positions assemblees (memorise pour le feu d'artifice)
     var centroid = new THREE.Vector3();
     pieceData.forEach(function (pd) { centroid.add(pd.posCible); });
     centroid.divideScalar(pieceData.length);
+    carCentre.copy(centroid);
 
     // Disperser les pieces en cercle
     var n = pieceData.length;
@@ -387,11 +466,12 @@ controllers.forEach(function (ctrl, idx) {
           arreter();
           var tFinal = chrono.cumul;
           sauvegarderScore(playerName, tFinal);
-          // Fermer la session AR apres 2.5 secondes
+          lancerFeuxArtifice();
+          // Fermer la session AR apres le feu d'artifice (6 s)
           setTimeout(function () {
             var sess = renderer.xr.getSession();
             if (sess) { try { sess.end(); } catch (e2) {} }
-          }, 2500);
+          }, 6000);
         }
       }
     }
@@ -488,9 +568,16 @@ renderer.setAnimationLoop(function (time, frame) {
     panneau.lookAt(camera.position);
   }
 
+  // Feu d'artifice : dt en secondes, borne pour eviter les sauts
+  var dt = lastTime ? (time - lastTime) / 1000 : 0;
+  lastTime = time;
+  if (dt > 0.1) dt = 0.1;
+  if (feux.length) majFeux(dt);
+
   dessiner();
   renderer.render(scene, camera);
 });
+var lastTime = 0;
 
 // --- Bouton "Entrer en AR" ---
 document.getElementById('btnCommencer').addEventListener('click', function () {
@@ -512,6 +599,15 @@ document.getElementById('btnCommencer').addEventListener('click', function () {
   hitTestSource = null;
   reticle.visible = false;
   preview.visible = false;
+
+  // Reinitialiser le feu d'artifice
+  feuxActif = false;
+  for (var fi = feux.length - 1; fi >= 0; fi--) {
+    scene.remove(feux[fi].pts);
+    feux[fi].pts.geometry.dispose();
+    feux[fi].pts.material.dispose();
+  }
+  feux = [];
 
   navigator.xr.requestSession('immersive-ar', {
     optionalFeatures: ['hit-test', 'local-floor', 'local']
