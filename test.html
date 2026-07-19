@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/>
+<style>body{background:#111;color:#fff;font-size:22px;padding:20px;font-family:sans-serif;}</style>
+</head>
+<body>
+<p id="a">ETAPE 1 : HTML charge</p>
+<p id="b">ETAPE 2 : en attente...</p>
+<p id="c">ETAPE 3 : en attente...</p>
+<p id="d">ETAPE 4 : en attente...</p>
+<p id="err" style="color:#f66"></p>
+
+<script>
+document.getElementById('a').textContent = 'ETAPE 1 : JS inline fonctionne !';
+window.onerror = function(m,f,l){ document.getElementById('err').textContent = 'ERREUR: '+m+' ('+f+':'+l+')'; };
+</script>
+
+<script src="three.min.js"
+  onload="document.getElementById('b').textContent='ETAPE 2 : three.min.js charge ! THREE=' + (typeof THREE);"
+  onerror="document.getElementById('b').textContent='ETAPE 2 : ECHEC chargement three.min.js';">
+</script>
+
+<script>
+document.getElementById('c').textContent = 'ETAPE 3 : script apres three.js execute';
+</script>
+
+<script>
+if(navigator.xr){
+  navigator.xr.isSessionSupported('immersive-ar').then(function(ok){
+    document.getElementById('d').textContent = 'ETAPE 4 : AR supporte = ' + ok;
+  });
+} else {
+  document.getElementById('d').textContent = 'ETAPE 4 : navigator.xr absent !';
+}
+</script>
+</body>
+</html>

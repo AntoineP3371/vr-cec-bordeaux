@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Assemblage CEC Bordeaux</title>
+  <style>
+    body { margin: 0; background: #000; }
+    #overlay {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.92); color: white; font-family: sans-serif;
+      z-index: 10; padding: 20px; box-sizing: border-box; overflow-y: auto;
+    }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    p  { font-size: 13px; color: #aaa; margin: 0 0 16px; }
+    input[type="text"], input[type="password"] {
+      font-size: 20px; padding: 12px 16px; border-radius: 10px;
+      border: 2px solid #444; background: #1a1a1a; color: white;
+      width: 260px; text-align: center; margin-bottom: 14px; display: block;
+    }
+    input:focus { border-color: #e0245e; outline: none; }
+    .btn { padding: 14px 30px; font-size: 17px; border: none; border-radius: 12px; color: white; cursor: pointer; margin: 5px; }
+    .btn-start  { background: #e0245e; }
+    .btn-new    { background: #27ae60; }
+    .btn-raz    { background: #444; font-size: 13px; padding: 9px 18px; }
+    .btn-ok     { background: #e0245e; font-size: 13px; padding: 9px 16px; }
+    #status  { margin-top: 12px; font-size: 13px; color: #aaa; }
+    #errbox  { font-size: 11px; color: #ff6b6b; white-space: pre-wrap; max-width: 90vw; margin-top: 6px; }
+    #tableau { width: 100%; max-width: 380px; margin: 12px 0; }
+    #tableau table { width: 100%; border-collapse: collapse; font-size: 15px; }
+    #tableau th { background: #222; padding: 8px 12px; text-align: left; border-bottom: 1px solid #444; }
+    #tableau td { padding: 8px 12px; border-bottom: 1px solid #222; }
+    .rang-or td  { color: #ffd700; font-weight: bold; }
+    .rang-ag td  { color: #c0c0c0; }
+    .rang-br td  { color: #cd7f32; }
+    .rang-moi td { background: #1a2a1a; }
+    #resultat   { font-size: 19px; color: #27ae60; margin: 8px 0; }
+    #raz-zone   { margin-top: 10px; display: none; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    #raz-erreur { font-size: 12px; color: #ff6b6b; width: 100%; text-align: center; }
+    canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+
+    <!-- Ecran 1 : saisie du nom -->
+    <div id="screen-nom">
+      <h1>Assemblage CEC Bordeaux</h1>
+      <p>Entrez votre nom pour commencer :</p>
+      <input id="inputNom" type="text" maxlength="20" placeholder="Votre nom..."/>
+      <button class="btn btn-start" id="btnCommencer">Entrer en AR</button>
+      <div id="status">Chargement...</div>
+      <div id="errbox"></div>
+    </div>
+
+    <!-- Ecran 2 : classement -->
+    <div id="screen-classement" style="display:none">
+      <h1>Classement CEC</h1>
+      <div id="resultat"></div>
+      <div id="tableau"></div>
+      <button class="btn btn-new" id="btnNouvelle">Nouvelle session</button>
+      <br/>
+      <button class="btn btn-raz" id="btnRAZ">Effacer le classement</button>
+      <div id="raz-zone">
+        <input id="inputCode" type="password" maxlength="4" placeholder="Code..." style="width:100px;margin-bottom:0"/>
+        <button class="btn btn-ok" id="btnCodeOK">OK</button>
+        <span id="raz-erreur"></span>
+      </div>
+    </div>
+
+  </div>
+  <canvas id="c"></canvas>
+
+  <script>
+    window.addEventListener('error', function (e) {
+      var el = document.getElementById('errbox');
+      if (el) el.textContent = 'ERR: ' + e.message + ' (' + e.filename + ':' + e.lineno + ')';
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      var el = document.getElementById('errbox');
+      if (el) el.textContent = 'ERR: ' + e.reason;
+    });
+  </script>
+
+  <script src="three.min.js"></script>
+  <script src="GLTFLoader.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
