@@ -240,14 +240,21 @@ reticle.matrixAutoUpdate = false;
 reticle.visible = false;
 scene.add(reticle);
 
-// --- Repere de placement (cercle orange) ---
+// --- Repere de placement (cercle orange = emprise voiture + pieces) ---
 var preview = new THREE.Group();
+// Grand cercle : emprise ou les pieces se dispersent (~0.4 m)
 preview.add(new THREE.Mesh(
-  new THREE.RingGeometry(0.18, 0.21, 32).rotateX(-Math.PI / 2),
-  new THREE.MeshBasicMaterial({ color: 0xff8800, side: THREE.DoubleSide })
+  new THREE.RingGeometry(0.42, 0.45, 48).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0xff8800, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
 ));
+// Cercle moyen : emprise de la voiture au centre
 preview.add(new THREE.Mesh(
-  new THREE.RingGeometry(0.06, 0.08, 32).rotateX(-Math.PI / 2),
+  new THREE.RingGeometry(0.16, 0.18, 40).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0xffbb44, side: THREE.DoubleSide, transparent: true, opacity: 0.8 })
+));
+// Point central
+preview.add(new THREE.Mesh(
+  new THREE.RingGeometry(0.02, 0.05, 24).rotateX(-Math.PI / 2),
   new THREE.MeshBasicMaterial({ color: 0xff8800, side: THREE.DoubleSide })
 ));
 preview.visible = false;
@@ -357,7 +364,7 @@ function chargerVoiture() {
     var root = gltf.scene;
     ajusterTaille(root, 0.3);
     anchor.add(root);
-    root.position.set(0, 0.02, -0.3);
+    root.position.set(0, 0.02, 0);
     root.updateMatrixWorld(true);
 
     var carRoot = root;
@@ -403,7 +410,7 @@ function chargerVoiture() {
 
     grabbables = pieceData.map(function (pd) { return pd.objet; });
 
-    panneau.position.set(0, 0.5, -0.3);
+    panneau.position.set(0, 0.5, 0);
     anchor.add(panneau);
 
   }, undefined, function (e) {
@@ -481,16 +488,9 @@ controllers.forEach(function (ctrl, idx) {
   ctrl.addEventListener('selectstart', function () {
     // Placement de l'ancre (1er appui)
     if (!anchorPlaced) {
-      if (reticle.visible) {
-        anchor.position.setFromMatrixPosition(reticle.matrix);
-        anchor.quaternion.setFromRotationMatrix(reticle.matrix);
-      } else {
-        var ctrlPos = new THREE.Vector3();
-        controllers[idx].getWorldPosition(ctrlPos);
-        anchor.position.copy(ctrlPos);
-      }
-      anchor.visible = true;
-      anchorPlaced   = true;
+      // La voiture suit deja la cible dans la boucle : on verrouille juste ici
+      anchor.visible  = true;
+      anchorPlaced    = true;
       reticle.visible = false;
       preview.visible = false;
       return;
@@ -543,23 +543,32 @@ renderer.setAnimationLoop(function (time, frame) {
       });
     }
 
+    // Determiner la position cible (hit-test si dispo, sinon manette droite)
+    var cible   = new THREE.Vector3();
+    var surTable = false;
     if (hitTestSource && refSpace) {
       var hits = frame.getHitTestResults(hitTestSource);
       if (hits.length > 0) {
         var pose = hits[0].getPose(refSpace);
-        reticle.visible = true;
         reticle.matrix.fromArray(pose.transform.matrix);
-        preview.visible = false;
-      } else {
-        reticle.visible = false;
+        cible.setFromMatrixPosition(reticle.matrix);
+        surTable = true;
       }
     }
+    if (!surTable) {
+      controllers[0].getWorldPosition(cible);
+    }
 
-    if (!reticle.visible) {
-      var ctrlPos = new THREE.Vector3();
-      controllers[0].getWorldPosition(ctrlPos);
-      preview.position.copy(ctrlPos);
-      preview.visible = true;
+    // Le cercle orange marque la cible
+    reticle.visible = false;
+    preview.position.copy(cible);
+    preview.visible = true;
+
+    // Apercu LIVE : la voiture fantome + les pieces suivent la cible
+    if (pieceData.length) {
+      anchor.position.copy(cible);
+      if (surTable) anchor.quaternion.setFromRotationMatrix(reticle.matrix);
+      anchor.visible = true;
     }
   }
 
