@@ -329,6 +329,27 @@ var demoCibleMark = new THREE.Mesh(
 demoCibleMark.renderOrder = 998; demoCibleMark.visible = false;
 scene.add(demoCibleMark);
 
+// Etiquette de texte flottante, placee juste a cote de l'element observe
+var dlc = document.createElement('canvas');
+dlc.width = 512; dlc.height = 170;
+var dlx = dlc.getContext('2d');
+var dltex = new THREE.CanvasTexture(dlc);
+var demoLabel = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.34, 0.113),
+  new THREE.MeshBasicMaterial({ map: dltex, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide })
+);
+demoLabel.renderOrder = 1000; demoLabel.visible = false;
+scene.add(demoLabel);
+
+function dessinerDemoLabel(txt) {
+  dlx.clearRect(0, 0, 512, 170);
+  dlx.fillStyle = 'rgba(15,15,28,0.92)'; rr(dlx, 0, 0, 512, 170, 20); dlx.fill();
+  dlx.strokeStyle = '#ffee00'; dlx.lineWidth = 4; rr(dlx, 2, 2, 508, 166, 20); dlx.stroke();
+  dlx.fillStyle = '#fff'; dlx.font = 'bold 32px sans-serif'; dlx.textAlign = 'center';
+  wrapText(dlx, txt, 256, 68, 466, 40);
+  dltex.needsUpdate = true;
+}
+
 function wrapText(c, texte, x, y, maxW, lh) {
   var mots = texte.split(' '); var ligne = ''; var yy = y;
   for (var i = 0; i < mots.length; i++) {
@@ -410,6 +431,7 @@ function nettoyerDemoObjets() {
   if (demoManette) { anchor.remove(demoManette); demoManette = null; }
   demoHalo.visible = false;
   demoCibleMark.visible = false;
+  demoLabel.visible = false;
 }
 
 function startDemo() {
@@ -434,9 +456,11 @@ function startDemo() {
   anchor.add(demoPiece);
   demoManette = creerDemoManette();
   anchor.add(demoManette);
-  // 1re narration declenchee par le geste utilisateur (deverrouille l'audio)
+  // Le panneau propose/fin est masque pendant l'animation
+  demoPrompt.visible = false;
   demoCaption = demoCaps[0];
-  parler(demoNarr[0]);
+  dessinerDemoLabel(demoCaps[0]);
+  parler(demoNarr[0]); // sans effet si le navigateur n'a pas de voix (Wolvic)
 }
 
 // Fin de l'animation : on montre le panneau REVOIR / FERMER
@@ -446,6 +470,7 @@ function finDemoAnim(parle) {
   stopParole();
   if (parle) parler('Voila, c est termine. A toi de jouer !');
   demoCaption = 'Rejouer la demonstration ?';
+  demoPrompt.visible = true;
 }
 
 // Fermeture complete de la demo
@@ -505,10 +530,11 @@ function majDemo() {
     focusLocal.copy(demoCible);
   }
 
-  // Changement de phase -> legende + narration vocale
+  // Changement de phase -> legende (texte pres de l'element) + narration
   if (ph !== demoPhase) {
     demoPhase = ph;
     demoCaption = demoCaps[ph];
+    dessinerDemoLabel(demoCaps[ph]);
     parler(demoNarr[ph]);
   }
 
@@ -522,6 +548,13 @@ function majDemo() {
   demoHalo.position.copy(fw); demoHalo.lookAt(camW);
   demoHalo.scale.setScalar(1 + 0.28 * Math.sin(t * 7));
   demoHalo.visible = true;
+
+  // Etiquette de texte juste a cote de l'element (legerement au-dessus, vers la camera)
+  var versCam = camW.clone().sub(fw).normalize();
+  demoLabel.position.copy(fw).addScaledVector(versCam, 0.09);
+  demoLabel.position.y += 0.16;
+  demoLabel.lookAt(camW);
+  demoLabel.visible = true;
 
   // Cercle vert de l'emplacement pendant deplacement et aimantation
   if (ph === 3 || ph === 4) {
@@ -776,10 +809,11 @@ controllers.forEach(function (ctrl, idx) {
       return;
     }
 
-    // Interaction avec le panneau de demonstration
+    // Pendant l'animation de demo : n'importe quel appui passe a l'ecran REVOIR / FERMER
+    if (demoEnCours) { finDemoAnim(false); return; }
+
+    // Interaction avec le panneau de demonstration (propose / fin)
     if (demoPrompt.visible) {
-      // Pendant l'animation : un appui passe a l'ecran REVOIR / FERMER
-      if (demoEnCours) { finDemoAnim(false); return; }
       var pw = new THREE.Vector3(); demoPrompt.getWorldPosition(pw);
       var pcc = new THREE.Vector3(); controllers[idx].getWorldPosition(pcc);
       if (pcc.distanceTo(pw) < 0.45) {
@@ -886,7 +920,10 @@ renderer.setAnimationLoop(function (time, frame) {
     panneau.lookAt(camPos);
   }
 
-  // Demonstration : panneau au-dessus de la voiture, face au regard
+  // Demonstration : animation (texte pres des elements) tant qu'elle tourne
+  if (demoEnCours) majDemo();
+
+  // Panneau propose / fin (REVOIR / FERMER), au-dessus de la voiture, face au regard
   if (demoPrompt.visible) {
     var od = new THREE.Vector3(0, 0.75, 0);
     anchor.localToWorld(od);
@@ -894,7 +931,6 @@ renderer.setAnimationLoop(function (time, frame) {
     var camPos2 = new THREE.Vector3();
     camera.getWorldPosition(camPos2);
     demoPrompt.lookAt(camPos2);
-    if (demoEnCours) majDemo();
     dessinerDemoPrompt();
   }
 
@@ -938,6 +974,7 @@ document.getElementById('btnCommencer').addEventListener('click', function () {
   demoPrompt.visible    = false;
   demoHalo.visible      = false;
   demoCibleMark.visible = false;
+  demoLabel.visible     = false;
   demoManette = null;
   demoPiece   = null;
   stopParole();
