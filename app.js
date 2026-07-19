@@ -574,7 +574,14 @@ renderer.setAnimationLoop(function (time, frame) {
 
   if (anchorPlaced) {
     preview.visible = false;
-    panneau.lookAt(camera.position);
+  }
+
+  // Le panneau compteur fait toujours face au regard (perpendiculaire a l'axe de vue),
+  // pendant le placement comme apres, tant que la voiture est visible
+  if (anchor.visible && panneau.parent) {
+    var camPos = new THREE.Vector3();
+    camera.getWorldPosition(camPos);
+    panneau.lookAt(camPos);
   }
 
   // Feu d'artifice : dt en secondes, borne pour eviter les sauts
