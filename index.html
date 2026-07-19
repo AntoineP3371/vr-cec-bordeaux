@@ -8,16 +8,25 @@
     body { margin: 0; background: #000; }
     #overlay {
       position: fixed; inset: 0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
+      align-items: center; justify-content: center; text-align: center;
       background: rgba(0,0,0,0.92); color: white; font-family: sans-serif;
       z-index: 10; padding: 20px; box-sizing: border-box; overflow-y: auto;
     }
+    #screen-nom, #screen-classement { text-align: center; }
+    /* Bandeau blanc avec les logos partenaires */
+    .logos-bar {
+      display: flex; align-items: center; justify-content: center; gap: 26px;
+      background: #fff; border-radius: 16px; padding: 16px 26px; margin: 0 0 22px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    }
+    .logos-bar img { height: 70px; width: auto; display: block; }
+    .logos-bar .sep { width: 2px; height: 56px; background: #ddd; }
     h1 { font-size: 22px; margin: 0 0 8px; }
     p  { font-size: 13px; color: #aaa; margin: 0 0 16px; }
     input[type="text"], input[type="password"] {
       font-size: 20px; padding: 12px 16px; border-radius: 10px;
       border: 2px solid #444; background: #1a1a1a; color: white;
-      width: 260px; text-align: center; margin-bottom: 14px; display: block;
+      width: 260px; text-align: center; margin: 0 auto 14px; display: block;
     }
     input:focus { border-color: #e0245e; outline: none; }
     .btn { padding: 14px 30px; font-size: 17px; border: none; border-radius: 12px; color: white; cursor: pointer; margin: 5px; }
@@ -38,6 +47,8 @@
     #resultat   { font-size: 19px; color: #27ae60; margin: 8px 0; }
     #raz-zone   { margin-top: 10px; display: none; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
     #raz-erreur { font-size: 12px; color: #ff6b6b; width: 100%; text-align: center; }
+    #version { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center;
+               font-size: 11px; color: #666; z-index: 11; }
     canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
   </style>
 </head>
@@ -46,6 +57,11 @@
 
     <!-- Ecran 1 : saisie du nom -->
     <div id="screen-nom">
+      <div class="logos-bar">
+        <img src="logo-gmp.png" alt="IUT GMP Bordeaux" onerror="this.style.display='none'"/>
+        <span class="sep"></span>
+        <img src="logo-cec.png" alt="Course en Cours" onerror="this.style.display='none'"/>
+      </div>
       <h1>Assemblage CEC Bordeaux</h1>
       <p>Entrez votre nom pour commencer :</p>
       <input id="inputNom" type="text" maxlength="20" placeholder="Votre nom..."/>
@@ -68,6 +84,8 @@
         <span id="raz-erreur"></span>
       </div>
     </div>
+
+    <div id="version">v6.2.0</div>
 
   </div>
   <canvas id="c"></canvas>
