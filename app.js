@@ -263,14 +263,43 @@ scene.add(preview);
 // ===================== DEMONSTRATION (tutoriel) =====================
 var demoEnCours      = false;
 var demoDejaProposee = false;
-var demoMode         = 'propose';   // 'propose' | 'run'
+var demoMode         = 'propose';   // 'propose' | 'run' | 'fin'
 var demoCaption      = '';
 var demoT0           = 0;
+var demoPhase        = -1;
 var demoManette      = null;
 var demoPiece        = null;
 var demoDepart       = new THREE.Vector3();
 var demoCible        = new THREE.Vector3();
 var demoQuat         = new THREE.Quaternion();
+
+// Textes des etapes (ASCII pour Wolvic) : legende courte + narration vocale
+var demoCaps = [
+  'La sphere blanche sert a attraper les pieces',
+  'On approche la sphere de la piece',
+  'GRIP (gachette laterale) : on attrape',
+  'On deplace vers le cercle vert',
+  'On relache le GRIP : aimantation'
+];
+var demoNarr = [
+  'Voici la manette. La petite sphere blanche au bout sert a attraper les pieces.',
+  'On approche la sphere blanche de la piece a poser.',
+  'On appuie sur la gachette laterale, appelee grip, pour attraper la piece. Le bouton devient vert.',
+  'On deplace la piece jusqu a son emplacement, indique par le cercle vert.',
+  'On relache le grip, et la piece s aimante toute seule au bon endroit.'
+];
+
+// Synthese vocale (fr). Sans effet si non supportee par le navigateur.
+function parler(txt) {
+  try {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(txt);
+    u.lang = 'fr-FR'; u.rate = 0.95; u.pitch = 1;
+    window.speechSynthesis.speak(u);
+  } catch (e) {}
+}
+function stopParole() { try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {} }
 
 // Panneau de la demo (canvas 2D -> texture)
 var dpc = document.createElement('canvas');
@@ -283,6 +312,22 @@ var demoPrompt = new THREE.Mesh(
 );
 demoPrompt.visible = false;
 scene.add(demoPrompt);
+
+// Halo d'attention (attire l'oeil sur l'element a observer)
+var demoHalo = new THREE.Mesh(
+  new THREE.RingGeometry(0.05, 0.078, 40),
+  new THREE.MeshBasicMaterial({ color: 0xffee00, side: THREE.DoubleSide, transparent: true, opacity: 0.9, depthTest: false })
+);
+demoHalo.renderOrder = 999; demoHalo.visible = false;
+scene.add(demoHalo);
+
+// Marqueur vert de l'emplacement cible
+var demoCibleMark = new THREE.Mesh(
+  new THREE.RingGeometry(0.045, 0.065, 40),
+  new THREE.MeshBasicMaterial({ color: 0x00e676, side: THREE.DoubleSide, transparent: true, opacity: 0.9, depthTest: false })
+);
+demoCibleMark.renderOrder = 998; demoCibleMark.visible = false;
+scene.add(demoCibleMark);
 
 function wrapText(c, texte, x, y, maxW, lh) {
   var mots = texte.split(' '); var ligne = ''; var yy = y;
@@ -299,27 +344,30 @@ function dessinerDemoPrompt() {
   dpx.clearRect(0, 0, 512, 256);
   dpx.fillStyle = 'rgba(15,15,28,0.95)'; rr(dpx, 0, 0, 512, 256, 18); dpx.fill();
   dpx.textAlign = 'center';
-  if (demoMode === 'propose') {
+  if (demoMode === 'propose' || demoMode === 'fin') {
+    var estFin = (demoMode === 'fin');
     dpx.fillStyle = '#4aa3df'; dpx.font = 'bold 30px sans-serif';
     dpx.fillText('DEMONSTRATION', 256, 52);
     dpx.fillStyle = '#ddd'; dpx.font = '19px sans-serif';
-    dpx.fillText('Voir comment poser une piece ?', 256, 88);
+    dpx.fillText(estFin ? 'Rejouer la demonstration ?' : 'Voir comment poser une piece ?', 256, 88);
     dpx.fillStyle = '#27ae60'; rr(dpx, 40, 110, 180, 90, 12); dpx.fill();
-    dpx.fillStyle = '#fff'; dpx.font = 'bold 30px sans-serif'; dpx.fillText('OUI', 130, 170);
+    dpx.fillStyle = '#fff'; dpx.font = 'bold 26px sans-serif';
+    dpx.fillText(estFin ? 'REVOIR' : 'OUI', 130, 165);
     dpx.fillStyle = '#555'; rr(dpx, 292, 110, 180, 90, 12); dpx.fill();
-    dpx.fillStyle = '#fff'; dpx.fillText('NON', 382, 170);
+    dpx.fillStyle = '#fff';
+    dpx.fillText(estFin ? 'FERMER' : 'NON', 382, 165);
   } else {
     dpx.fillStyle = '#4aa3df'; dpx.font = 'bold 22px sans-serif';
-    dpx.fillText('DEMONSTRATION', 256, 40);
-    dpx.fillStyle = '#fff'; dpx.font = 'bold 23px sans-serif';
-    wrapText(dpx, demoCaption, 256, 92, 470, 30);
+    dpx.fillText('DEMONSTRATION', 256, 42);
+    dpx.fillStyle = '#fff'; dpx.font = 'bold 24px sans-serif';
+    wrapText(dpx, demoCaption, 256, 96, 470, 32);
     dpx.fillStyle = '#888'; dpx.font = '14px sans-serif';
-    dpx.fillText('(touche ce panneau pour passer)', 256, 232);
+    dpx.fillText('(touche ce panneau pour passer)', 256, 234);
   }
   dptex.needsUpdate = true;
 }
 
-// Manette virtuelle stylisee (style Quest) avec grip + gachette
+// Manette virtuelle stylisee (style Quest) : grip + gachette + sphere blanche
 function creerDemoManette() {
   var g = new THREE.Group();
   var matCorps = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
@@ -340,7 +388,12 @@ function creerDemoManette() {
     new THREE.MeshStandardMaterial({ color: 0x888888, emissive: 0x000000 }));
   grip.position.set(0.021, -0.01, 0.0);
   g.add(grip);
-  g.userData.grip = grip; g.userData.trigger = trig;
+  // Sphere blanche au bout : le point qui attrape les pieces
+  var tip = new THREE.Mesh(new THREE.SphereGeometry(0.02, 18, 18),
+    new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  tip.position.set(0, 0.0, 0.06);
+  g.add(tip);
+  g.userData.grip = grip; g.userData.trigger = trig; g.userData.tip = tip;
   g.rotation.x = 0.5;
   return g;
 }
@@ -352,10 +405,19 @@ function setGripDemo(on) {
   if (grip.material.emissive) grip.material.emissive.setHex(on ? 0x00c853 : 0x000000);
 }
 
+function nettoyerDemoObjets() {
+  if (demoPiece)   { anchor.remove(demoPiece);   demoPiece = null; }
+  if (demoManette) { anchor.remove(demoManette); demoManette = null; }
+  demoHalo.visible = false;
+  demoCibleMark.visible = false;
+}
+
 function startDemo() {
-  if (!pieceData.length || demoEnCours) return;
+  if (!pieceData.length) return;
+  nettoyerDemoObjets();
+  stopParole();
   demoDejaProposee = true;
-  demoEnCours = true; demoMode = 'run'; demoT0 = performance.now();
+  demoEnCours = true; demoMode = 'run'; demoT0 = performance.now(); demoPhase = 0;
   var pd = pieceData[0];
   demoDepart.copy(pd.objet.position);
   demoCible.copy(pd.posCible);
@@ -372,13 +434,26 @@ function startDemo() {
   anchor.add(demoPiece);
   demoManette = creerDemoManette();
   anchor.add(demoManette);
+  // 1re narration declenchee par le geste utilisateur (deverrouille l'audio)
+  demoCaption = demoCaps[0];
+  parler(demoNarr[0]);
 }
 
-function finDemo() {
-  demoEnCours = false;
+// Fin de l'animation : on montre le panneau REVOIR / FERMER
+function finDemoAnim(parle) {
+  demoEnCours = false; demoMode = 'fin';
+  nettoyerDemoObjets();
+  stopParole();
+  if (parle) parler('Voila, c est termine. A toi de jouer !');
+  demoCaption = 'Rejouer la demonstration ?';
+}
+
+// Fermeture complete de la demo
+function fermerDemo() {
+  demoEnCours = false; demoMode = 'propose';
   demoPrompt.visible = false;
-  if (demoPiece)   { anchor.remove(demoPiece);   demoPiece = null; }
-  if (demoManette) { anchor.remove(demoManette); demoManette = null; }
+  nettoyerDemoObjets();
+  stopParole();
 }
 
 function majDemo() {
@@ -386,35 +461,76 @@ function majDemo() {
   var off  = new THREE.Vector3(0.03, 0.07, 0.03);
   var cP   = demoDepart.clone().add(off);   // manette au niveau de la piece
   var cT   = demoCible.clone().add(off);     // manette a l'emplacement
-  var cDep = demoDepart.clone().add(new THREE.Vector3(0.3, 0.22, 0.16)); // depart manette
+  var cDep = demoDepart.clone().add(new THREE.Vector3(0.3, 0.22, 0.16)); // depart
   function ss(a) { a = Math.max(0, Math.min(1, a)); return a * a * (3 - 2 * a); }
 
-  if (t < 2.0) {                       // 1. approche
-    demoManette.position.lerpVectors(cDep, cP, ss(t / 2.0));
+  // Decoupage temporel (rythme lent, ~17.5 s)
+  var ph;
+  if      (t < 3.5)  ph = 0;   // intro : la sphere blanche
+  else if (t < 7.0)  ph = 1;   // approche
+  else if (t < 10.0) ph = 2;   // saisie (grip)
+  else if (t < 14.5) ph = 3;   // deplacement
+  else if (t < 17.5) ph = 4;   // relache -> aimantation
+  else               ph = 5;   // fin
+
+  if (ph === 5) { finDemoAnim(true); return; }
+
+  var focusLocal = new THREE.Vector3();
+  if (ph === 0) {
+    demoManette.position.copy(cDep);
     demoPiece.position.copy(demoDepart);
     setGripDemo(false);
-    demoCaption = '1/4  La manette s\'approche de la piece';
-  } else if (t < 2.7) {                // 2. saisie (grip)
+    focusLocal.copy(cDep).add(new THREE.Vector3(0, 0, 0.06)); // la sphere blanche
+  } else if (ph === 1) {
+    demoManette.position.lerpVectors(cDep, cP, ss((t - 3.5) / 3.5));
+    demoPiece.position.copy(demoDepart);
+    setGripDemo(false);
+    focusLocal.copy(demoDepart);
+  } else if (ph === 2) {
     demoManette.position.copy(cP);
     demoPiece.position.copy(demoDepart);
     setGripDemo(true);
-    demoCaption = '2/4  Appui sur GRIP (gachette laterale) : la piece est saisie';
-  } else if (t < 5.3) {                // 3. deplacement
-    var k = ss((t - 2.7) / 2.6);
+    focusLocal.copy(cP).add(new THREE.Vector3(0.021, -0.01, 0)); // le grip
+  } else if (ph === 3) {
+    var k = ss((t - 10.0) / 4.5);
     demoManette.position.lerpVectors(cP, cT, k);
     demoPiece.position.lerpVectors(demoDepart, demoCible, k);
     setGripDemo(true);
-    demoCaption = '3/4  On deplace la piece vers son emplacement';
-  } else if (t < 6.1) {                // 4. relache -> aimantation
+    focusLocal.copy(demoCible);
+  } else if (ph === 4) {
     demoManette.position.copy(cT);
     demoPiece.position.copy(demoCible);
     demoPiece.quaternion.copy(demoQuat);
     setGripDemo(false);
-    demoCaption = '4/4  On relache GRIP : la piece s\'aimante en place';
-  } else if (t < 7.8) {                // 5. fin
-    demoCaption = 'Termine ! A toi de jouer.';
+    focusLocal.copy(demoCible);
+  }
+
+  // Changement de phase -> legende + narration vocale
+  if (ph !== demoPhase) {
+    demoPhase = ph;
+    demoCaption = demoCaps[ph];
+    parler(demoNarr[ph]);
+  }
+
+  // Sphere blanche pulsante en intro et a la saisie
+  var tip = demoManette.userData.tip;
+  if (tip) tip.scale.setScalar((ph === 0 || ph === 2) ? (1 + 0.4 * Math.sin(t * 8)) : 1);
+
+  // Halo d'attention (billboard, pulsant) sur l'element a observer
+  var camW = new THREE.Vector3(); camera.getWorldPosition(camW);
+  var fw = anchor.localToWorld(focusLocal.clone());
+  demoHalo.position.copy(fw); demoHalo.lookAt(camW);
+  demoHalo.scale.setScalar(1 + 0.28 * Math.sin(t * 7));
+  demoHalo.visible = true;
+
+  // Cercle vert de l'emplacement pendant deplacement et aimantation
+  if (ph === 3 || ph === 4) {
+    var tw = anchor.localToWorld(demoCible.clone());
+    demoCibleMark.position.copy(tw); demoCibleMark.lookAt(camW);
+    demoCibleMark.scale.setScalar(1 + 0.18 * Math.sin(t * 5));
+    demoCibleMark.visible = true;
   } else {
-    finDemo();
+    demoCibleMark.visible = false;
   }
 }
 // =================== FIN DEMONSTRATION ===================
@@ -660,20 +776,23 @@ controllers.forEach(function (ctrl, idx) {
       return;
     }
 
-    // Interaction avec le panneau de demonstration (OUI / NON ou passer)
+    // Interaction avec le panneau de demonstration
     if (demoPrompt.visible) {
-      if (demoEnCours) { finDemo(); return; }
+      // Pendant l'animation : un appui passe a l'ecran REVOIR / FERMER
+      if (demoEnCours) { finDemoAnim(false); return; }
       var pw = new THREE.Vector3(); demoPrompt.getWorldPosition(pw);
       var pcc = new THREE.Vector3(); controllers[idx].getWorldPosition(pcc);
       if (pcc.distanceTo(pw) < 0.45) {
         var lpd = demoPrompt.worldToLocal(pcc.clone());
         var dcx = (lpd.x + 0.2) / 0.4 * 512;
         var dcy = (0.1 - lpd.y) / 0.2 * 256;
-        if (dcx >= 40 && dcx <= 220 && dcy >= 110 && dcy <= 200) {
+        var gauche = (dcx >= 40  && dcx <= 220 && dcy >= 110 && dcy <= 200); // OUI / REVOIR
+        var droite = (dcx >= 292 && dcx <= 472 && dcy >= 110 && dcy <= 200); // NON / FERMER
+        if (gauche) {
           startDemo();
-        } else if (dcx >= 292 && dcx <= 472 && dcy >= 110 && dcy <= 200) {
+        } else if (droite) {
           demoDejaProposee = true;
-          demoPrompt.visible = false;
+          fermerDemo();
         }
       }
       return;
@@ -814,9 +933,14 @@ document.getElementById('btnCommencer').addEventListener('click', function () {
   // Reinitialiser la demonstration
   demoEnCours      = false;
   demoDejaProposee = false;
-  demoPrompt.visible = false;
+  demoMode         = 'propose';
+  demoPhase        = -1;
+  demoPrompt.visible    = false;
+  demoHalo.visible      = false;
+  demoCibleMark.visible = false;
   demoManette = null;
   demoPiece   = null;
+  stopParole();
 
   // Reinitialiser le feu d'artifice
   feuxActif = false;
@@ -836,6 +960,7 @@ document.getElementById('btnCommencer').addEventListener('click', function () {
       chargerVoiture();
 
       session.addEventListener('end', function () {
+        stopParole();
         if (sessionComplete) {
           montrerEcranClassement(chrono.cumul);
         } else {
