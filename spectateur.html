@@ -6,6 +6,9 @@
 <title>Assemblage CEC - Tableau de bord</title>
 <style>
   * { box-sizing: border-box; }
+  /* Barre de defilement toujours reservee : sans cela son apparition/disparition
+     change la largeur de la fenetre, ce qui redimensionne le canvas 3D (flash). */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
   body {
     margin: 0; min-height: 100vh; background: #0d0f16; color: #fff;
     font-family: system-ui, sans-serif; display: flex; flex-direction: column;
@@ -18,8 +21,11 @@
 
   h1 { font-size: 22px; margin: 0 0 10px; letter-spacing: 1px; }
 
-  #etat { display: flex; align-items: center; gap: 9px; font-size: 13px;
-          color: #888; margin-bottom: 14px; }
+  /* Hauteur et largeur figees : le texte change chaque seconde ("silencieux
+     depuis N s"), il ne doit jamais decaler la mise en page. */
+  #etat { display: flex; align-items: center; justify-content: center; gap: 9px;
+          font-size: 13px; color: #888; margin-bottom: 14px;
+          height: 18px; min-width: 320px; white-space: nowrap; overflow: hidden; }
   .pastille { width: 11px; height: 11px; border-radius: 50%; background: #c0392b; }
   .pastille.on { background: #27ae60; box-shadow: 0 0 10px #27ae60; }
 
@@ -302,12 +308,28 @@
       orbite.rayon = Math.max(0.4, Math.min(2.5, orbite.rayon + e.deltaY * 0.0012));
     }, { passive: false });
 
-    // ATTENTION : ne jamais comparer canvas.width a clientWidth. Avec un pixelRatio
-    // de 2, canvas.width vaut le double -> la condition serait toujours vraie et le
-    // canvas serait recree a chaque image (clignotement). On memorise les dimensions.
-    var dernierW = 0, dernierH = 0;
-    // ---------- Plein ecran ----------
     var zoneVue = document.querySelector('.carte.vue');
+
+    // ---------- Redimensionnement ----------
+    // Declenche par un ResizeObserver, JAMAIS a chaque image : lire clientWidth
+    // dans la boucle forcerait un recalcul de mise en page 60 fois par seconde.
+    // On memorise aussi les dimensions : ne jamais comparer canvas.width a
+    // clientWidth, car avec un devicePixelRatio de 2 il vaut le double.
+    var dernierW = 0, dernierH = 0;
+    function redimensionner() {
+      var w = canvas3d.clientWidth, h = canvas3d.clientHeight;
+      if (!w || !h) return;
+      if (w === dernierW && h === dernierH) return;
+      dernierW = w; dernierH = h;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    if (window.ResizeObserver) new ResizeObserver(redimensionner).observe(zoneVue);
+    else window.addEventListener('resize', redimensionner);
+    redimensionner();
+
+    // ---------- Plein ecran ----------
     var btnPlein = document.getElementById('btnPlein');
     btnPlein.addEventListener('click', function () {
       try {
@@ -318,17 +340,6 @@
     document.addEventListener('fullscreenchange', function () {
       btnPlein.textContent = document.fullscreenElement ? 'Quitter le plein ecran' : 'Plein ecran';
     });
-
-    function redimensionner() {
-      var w = canvas3d.clientWidth, h = canvas3d.clientHeight;
-      if (!w || !h) return;
-      if (w !== dernierW || h !== dernierH) {
-        dernierW = w; dernierH = h;
-        renderer.setSize(w, h, false);
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-      }
-    }
 
     // ---------- Application des donnees recues ----------
     function appliquerGeometrie(m) {
@@ -388,9 +399,11 @@
     function boucle() {
       requestAnimationFrame(boucle);
 
-      // Chrono interpole localement entre deux messages
+      // Chrono interpole localement entre deux messages. On n'extrapole que si le
+      // signal est frais : sinon le chrono continuerait a courir apres deconnexion.
+      var frais = (Date.now() - dernierMsg) < 5000;
       var t = etat.tempsMs;
-      if (etat.enMarche && recuA) t += (performance.now() - recuA);
+      if (etat.enMarche && recuA && frais) t += (performance.now() - recuA);
       poser(elChrono, 'textContent', formatTemps(t));
       var clsChrono = 'chrono ' + (etat.termine ? 'fini' : (etat.enMarche ? 'marche' : 'arret'));
       poser(elChrono, 'className', clsChrono);
@@ -418,7 +431,6 @@
         if (fantomes3d[i].visible === proche) fantomes3d[i].visible = !proche;
       }
 
-      redimensionner();
       placerCamera();
       renderer.render(scene, camera);
     }
