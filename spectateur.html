@@ -179,6 +179,7 @@
                  enAR:false, termine:false, pose:false };
     var recuA      = 0;   // performance.now() du dernier message
     var dernierMsg = 0;   // Date.now() du dernier message
+    var tAffiche   = 0;   // derniere valeur de chrono affichee (gel si signal perdu)
 
     function pad(n) { return n < 10 ? '0' + n : '' + n; }
     function formatTemps(t) {
@@ -365,7 +366,32 @@
       }
     }
 
+    // Plusieurs pages peuvent emettre sur le canal (casque + onglet PC oublie).
+    // On se verrouille sur UNE source, sinon l'affichage alterne entre deux etats
+    // et le chrono / la barre clignotent.
+    var sidActif = null, vuA = 0, sourcesVues = {};
+
+    function accepter(p) {
+      var now = Date.now();
+      if (!p.sid) return true;                 // ancien casque sans identifiant
+      sourcesVues[p.sid] = now;
+      if (sidActif === p.sid) { vuA = now; return true; }
+      var actifMuet  = (now - vuA) > 3000;     // la source suivie s'est tue
+      var plusEngage = (p.enAR || p.pose);     // celle-ci est en pleine session
+      if (sidActif === null || actifMuet || plusEngage) {
+        sidActif = p.sid; vuA = now; return true;
+      }
+      return false;                            // source secondaire : ignoree
+    }
+
+    function nbSourcesActives() {
+      var now = Date.now(), n = 0;
+      for (var k in sourcesVues) if (now - sourcesVues[k] < 8000) n++;
+      return n;
+    }
+
     function majEtat(p) {
+      if (!accepter(p)) return;
       dernierMsg = Date.now();
       recuA = performance.now();
       etat.nom      = p.nom || '';
@@ -399,11 +425,16 @@
     function boucle() {
       requestAnimationFrame(boucle);
 
-      // Chrono interpole localement entre deux messages. On n'extrapole que si le
-      // signal est frais : sinon le chrono continuerait a courir apres deconnexion.
-      var frais = (Date.now() - dernierMsg) < 5000;
-      var t = etat.tempsMs;
-      if (etat.enMarche && recuA && frais) t += (performance.now() - recuA);
+      // Chrono interpole localement entre deux messages.
+      // Si le signal devient intermittent, on GELE la derniere valeur affichee :
+      // revenir a etat.tempsMs ferait sauter les chiffres en arriere (scintillement),
+      // et extrapoler indefiniment ferait courir le chrono apres deconnexion.
+      var frais = (Date.now() - dernierMsg) < 8000;
+      var t;
+      if (!etat.enMarche)            t = etat.tempsMs;
+      else if (recuA && frais)       t = etat.tempsMs + (performance.now() - recuA);
+      else                           t = tAffiche;
+      tAffiche = t;
       poser(elChrono, 'textContent', formatTemps(t));
       var clsChrono = 'chrono ' + (etat.termine ? 'fini' : (etat.enMarche ? 'marche' : 'arret'));
       poser(elChrono, 'className', clsChrono);
@@ -437,15 +468,21 @@
     boucle();
 
     // ---------- Indicateur de connexion ----------
+    // Texte stable (pas de compteur de secondes qui changerait l'affichage
+    // chaque seconde) et seuil large pour eviter tout va-et-vient.
     setInterval(function () {
-      var actif = (Date.now() - dernierMsg) < 5000;
+      var actif = (Date.now() - dernierMsg) < 8000;
       poser(elPast, 'className', 'pastille' + (actif ? ' on' : ''));
+      var txt;
       if (actif) {
-        poser(elEtat, 'textContent', 'Casque connecte');
-      } else if (dernierMsg) {
-        poser(elEtat, 'textContent', 'Casque silencieux depuis ' +
-              Math.round((Date.now() - dernierMsg) / 1000) + ' s');
+        var n = nbSourcesActives();
+        txt = (n > 1)
+          ? 'Casque connecte - attention : ' + n + ' pages emettent, une seule est suivie'
+          : 'Casque connecte';
+      } else {
+        txt = dernierMsg ? 'Casque hors ligne' : 'En attente du casque...';
       }
+      poser(elEtat, 'textContent', txt);
     }, 1000);
 
     // ---------- Connexion Realtime ----------

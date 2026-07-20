@@ -88,6 +88,9 @@ var CANAL_LIVE = 'vr-cec-live';
 var canalLive    = null;
 var canalPret    = false;   // vrai seulement quand le WebSocket est abonne
 var dernierEnvoi = 0;
+// Identifiant unique de cet emetteur : permet a la page spectateur de ne suivre
+// qu'une seule source si plusieurs pages sont ouvertes (casque + onglet PC oublie).
+var SID = Math.random().toString(36).slice(2, 10);
 
 function initDiffusion() {
   try {
@@ -142,6 +145,7 @@ function diffuserEtat(force) {
   dernierEnvoi = maintenant;
 
   var msg = {
+    sid:      SID,
     nom:      playerName,
     tempsMs:  Math.round(tempsActuel()),
     enMarche: chrono.enMarche,
