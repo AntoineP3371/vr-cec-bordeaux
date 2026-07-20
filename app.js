@@ -88,6 +88,7 @@ var SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJl
 var CANAL_LIVE = 'vr-cec-live';
 
 var canalLive    = null;
+var canalPret    = false;   // vrai seulement quand le WebSocket est abonne
 var dernierEnvoi = 0;
 
 function initDiffusion() {
@@ -95,13 +96,17 @@ function initDiffusion() {
     if (typeof supabase === 'undefined') return;
     var client = supabase.createClient(SB_URL, SB_ANON);
     canalLive = client.channel(CANAL_LIVE);
-    canalLive.subscribe();
-  } catch (e) { canalLive = null; }
+    canalLive.subscribe(function (statut) {
+      canalPret = (statut === 'SUBSCRIBED');
+    });
+  } catch (e) { canalLive = null; canalPret = false; }
 }
 
+// On n'envoie QUE si le canal est abonne : sinon supabase-js bascule
+// automatiquement en REST (une requete HTTP par message), inefficace a 8 msg/s.
 function envoyer(evenement, donnees) {
   try {
-    if (!canalLive) return;
+    if (!canalLive || !canalPret) return;
     canalLive.send({ type: 'broadcast', event: evenement, payload: donnees });
   } catch (e) {}
 }
@@ -212,6 +217,15 @@ function replacer() {
   anchorPlaced = false;
   preview.visible = true;
 }
+
+// Quitte la realite augmentee : l'evenement 'end' de la session ramene
+// automatiquement a l'ecran d'accueil (saisie du nom).
+function quitterAR() {
+  try {
+    var s = renderer.xr.getSession();
+    if (s) s.end();
+  } catch (e) {}
+}
 function tempsActuel() {
   return chrono.cumul + (chrono.enMarche ? performance.now() - chrono.debut : 0);
 }
@@ -286,11 +300,24 @@ function dessiner() {
     ctx.fillText('RAZ', 424, 145);
     ctx.fillText('CHRONO', 424, 168);
 
-    // --- Rangee 2 : REPLACER LA VOITURE (y=206 h=88) ---
+    // --- Rangee 2 : REPLACER (8..298) | QUITTER (310..504), y=206 h=88 ---
     ctx.fillStyle = anchorPlaced ? '#2c5aa0' : '#ff8800';
-    rr(ctx, 8, 206, 496, 88, 10); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 22px sans-serif';
-    ctx.fillText(anchorPlaced ? 'REPLACER LA VOITURE' : 'VISEZ ET APPUYEZ', 256, 258);
+    rr(ctx, 8, 206, 290, 88, 10); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 19px sans-serif';
+    if (anchorPlaced) {
+      ctx.fillText('REPLACER', 153, 245);
+      ctx.fillText('LA VOITURE', 153, 269);
+    } else {
+      ctx.fillText('VISEZ ET', 153, 245);
+      ctx.fillText('APPUYEZ', 153, 269);
+    }
+
+    ctx.fillStyle = '#8e2b2b';
+    rr(ctx, 310, 206, 194, 88, 10); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 19px sans-serif';
+    ctx.fillText('QUITTER', 407, 245);
+    ctx.font = '14px sans-serif'; ctx.fillStyle = '#f0c0c0';
+    ctx.fillText('(retour accueil)', 407, 269);
   }
 
   tex.needsUpdate = true;
@@ -933,8 +960,10 @@ controllers.forEach(function (ctrl, idx) {
       arreter();
     } else if (dans(344, 112, 160, 78)) {
       razChrono();
-    } else if (dans(8, 206, 496, 88)) {
+    } else if (dans(8, 206, 290, 88)) {
       replacer();
+    } else if (dans(310, 206, 194, 88)) {
+      quitterAR();
     }
   });
 });
