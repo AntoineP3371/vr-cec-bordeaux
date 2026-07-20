@@ -88,6 +88,25 @@
   tr.ag  td { color: #c8ccd6; }
   tr.br  td { color: #cd7f32; }
   .vide2 { color: #555; text-align: center; padding: 18px; font-size: 14px; }
+
+  /* Effacement du classement (protege par code) */
+  .zoneRaz { margin-top: 18px; padding-top: 14px; border-top: 1px solid #222735;
+             text-align: center; }
+  .btnRaz { background: #232838; color: #9aa3b6; border: 1px solid #333c52;
+            border-radius: 9px; padding: 9px 16px; font-size: 13px;
+            font-family: inherit; cursor: pointer; }
+  .btnRaz:hover { background: #8e2b2b; color: #fff; border-color: #8e2b2b; }
+  .razCode { display: none; margin-top: 10px; gap: 8px;
+             align-items: center; justify-content: center; }
+  .razCode.ouvert { display: flex; }
+  .razCode input { width: 90px; text-align: center; font-size: 16px; padding: 8px;
+                   border-radius: 8px; border: 1px solid #333c52;
+                   background: #0d0f16; color: #fff; font-family: inherit; }
+  .btnOk { background: #c0392b; color: #fff; border: none; border-radius: 8px;
+           padding: 9px 14px; font-size: 13px; font-family: inherit; cursor: pointer; }
+  .razMsg { font-size: 12px; margin-top: 8px; min-height: 16px; }
+  .razMsg.err { color: #ff6b6b; }
+  .razMsg.ok  { color: #27ae60; }
 </style>
 </head>
 <body>
@@ -120,6 +139,14 @@
     <div class="carte">
       <h2>Classement</h2>
       <div id="classement"><div class="vide2">Aucun score enregistre</div></div>
+      <div class="zoneRaz">
+        <button class="btnRaz" id="btnRAZ">Effacer le classement</button>
+        <div class="razCode" id="razZone">
+          <input id="inputCode" type="password" maxlength="4" placeholder="Code" autocomplete="off"/>
+          <button class="btnOk" id="btnCodeOK">Valider</button>
+        </div>
+        <div class="razMsg" id="razMsg"></div>
+      </div>
     </div>
   </div>
 
@@ -186,8 +213,9 @@
     grille.position.y = -0.001;
     plateau.add(grille);
 
-    var pieces3d = [];   // meshes pilotes par la diffusion
-    var pretes   = false;
+    var pieces3d   = [];   // meshes pilotes par la diffusion
+    var fantomes3d = [];   // fantomes cibles (meme indice que pieces3d)
+    var pretes     = false;
 
     // Manettes (spheres blanches, comme dans le casque)
     var mains = [];
@@ -207,8 +235,10 @@
     tete.visible = false;
     plateau.add(tete);
 
+    // polygonOffset : evite en plus le z-fighting si une piece frole son fantome
     var matFantome = new THREE.MeshBasicMaterial({
-      color: 0x00e5ff, transparent: true, opacity: 0.18, depthWrite: false
+      color: 0x00e5ff, transparent: true, opacity: 0.18, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
     });
 
     function ajusterTaille(objet, cible) {
@@ -241,6 +271,7 @@
 
         plateau.attach(piece);
         pieces3d.push(piece);
+        fantomes3d.push(fantome);
       });
       pretes = true;
     });
@@ -380,6 +411,13 @@
       poser(elProg, 'textContent', etat.posees + ' / ' + etat.total +
             (etat.total > 1 ? ' pieces posees' : ' piece posee'));
 
+      // Un fantome disparait des que sa piece est posee dessus : sans cela les
+      // deux surfaces se superposent exactement et scintillent (z-fighting).
+      for (var i = 0; i < fantomes3d.length; i++) {
+        var proche = pieces3d[i].position.distanceTo(fantomes3d[i].position) < 0.02;
+        if (fantomes3d[i].visible === proche) fantomes3d[i].visible = !proche;
+      }
+
       redimensionner();
       placerCamera();
       renderer.render(scene, camera);
@@ -399,12 +437,15 @@
     }, 1000);
 
     // ---------- Connexion Realtime ----------
+    var canal = null, canalPret = false;
     try {
       var client = supabase.createClient(SB_URL, SB_ANON);
-      client.channel(CANAL)
+      canal = client.channel(CANAL);
+      canal
         .on('broadcast', { event: 'etat' },       function (m) { majEtat(m.payload || {}); })
         .on('broadcast', { event: 'classement' }, function (m) { majClassement(m.payload || {}); })
         .subscribe(function (st) {
+          canalPret = (st === 'SUBSCRIBED');
           if (st === 'SUBSCRIBED') poser(elEtat, 'textContent', 'En attente du casque...');
           else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT')
             poser(elEtat, 'textContent', 'Erreur de connexion (' + st + ')');
@@ -412,6 +453,47 @@
     } catch (e) {
       elEtat.textContent = 'Erreur : ' + e.message;
     }
+
+    // ---------- Effacement du classement (commande envoyee au casque) ----------
+    // Le classement est stocke dans le casque : on lui envoie l'ordre, il efface
+    // et rediffuse le classement vide. Le code est aussi verifie cote casque.
+    var elRazZone = document.getElementById('razZone');
+    var elRazMsg  = document.getElementById('razMsg');
+    var elCode    = document.getElementById('inputCode');
+
+    document.getElementById('btnRAZ').addEventListener('click', function () {
+      elRazZone.classList.toggle('ouvert');
+      elRazMsg.textContent = ''; elRazMsg.className = 'razMsg';
+      elCode.value = '';
+      if (elRazZone.classList.contains('ouvert')) elCode.focus();
+    });
+
+    function validerRaz() {
+      var code = elCode.value;
+      if (code !== '1234') {
+        elRazMsg.textContent = 'Code incorrect';
+        elRazMsg.className = 'razMsg err';
+        elCode.value = ''; elCode.focus();
+        return;
+      }
+      var connecte = (Date.now() - dernierMsg) < 5000;
+      if (!canal || !canalPret || !connecte) {
+        elRazMsg.textContent = 'Casque non connecte : impossible d\'effacer pour l\'instant';
+        elRazMsg.className = 'razMsg err';
+        return;
+      }
+      canal.send({ type: 'broadcast', event: 'commande',
+                   payload: { action: 'razClassement', code: code } });
+      elRazMsg.textContent = 'Demande envoyee au casque...';
+      elRazMsg.className = 'razMsg ok';
+      elCode.value = '';
+      elRazZone.classList.remove('ouvert');
+    }
+
+    document.getElementById('btnCodeOK').addEventListener('click', validerRaz);
+    elCode.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') validerRaz();
+    });
   })();
   </script>
 </body>

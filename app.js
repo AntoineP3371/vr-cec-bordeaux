@@ -68,8 +68,6 @@ function montrerEcranNom() {
 function montrerEcranClassement(temps) {
   document.getElementById('screen-nom').style.display = 'none';
   document.getElementById('screen-classement').style.display = '';
-  document.getElementById('raz-zone').style.display = 'none';
-  document.getElementById('raz-erreur').textContent = '';
   afficherClassement(temps);
   overlay.style.display = 'flex';
 }
@@ -96,6 +94,19 @@ function initDiffusion() {
     if (typeof supabase === 'undefined') return;
     var client = supabase.createClient(SB_URL, SB_ANON);
     canalLive = client.channel(CANAL_LIVE);
+
+    // Commandes envoyees par la page spectateur. Le classement etant stocke
+    // dans le casque (localStorage), c'est lui qui l'efface. Le code est
+    // re-verifie ici et pas seulement cote PC.
+    canalLive.on('broadcast', { event: 'commande' }, function (m) {
+      var p = (m && m.payload) || {};
+      if (p.action === 'razClassement' && p.code === '1234') {
+        effacerScores();
+        afficherClassement();
+        diffuserClassement();
+      }
+    });
+
     canalLive.subscribe(function (statut) {
       canalPret = (statut === 'SUBSCRIBED');
     });
@@ -1131,27 +1142,8 @@ document.getElementById('btnNouvelle').addEventListener('click', function () {
   montrerEcranNom();
 });
 
-// --- Bouton "Effacer classement" ---
-document.getElementById('btnRAZ').addEventListener('click', function () {
-  var zone = document.getElementById('raz-zone');
-  zone.style.display = zone.style.display === 'flex' ? 'none' : 'flex';
-  document.getElementById('raz-erreur').textContent = '';
-  document.getElementById('inputCode').value = '';
-});
-
-// --- Validation du code RAZ ---
-document.getElementById('btnCodeOK').addEventListener('click', function () {
-  var code = document.getElementById('inputCode').value;
-  if (code === '1234') {
-    effacerScores();
-    afficherClassement();
-    diffuserClassement();
-    document.getElementById('raz-zone').style.display = 'none';
-  } else {
-    document.getElementById('raz-erreur').textContent = 'Code incorrect';
-    document.getElementById('inputCode').value = '';
-  }
-});
+// L'effacement du classement est desormais commande depuis la page spectateur
+// (voir la reception de l'evenement 'commande' dans initDiffusion).
 
 // --- Affichage initial ---
 montrerEcranNom();
