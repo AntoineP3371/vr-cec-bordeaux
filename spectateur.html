@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Assemblage CEC - Tableau de bord</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #0d0f16; color: #fff;
+    font-family: system-ui, sans-serif; display: flex; flex-direction: column;
+    align-items: center; padding: 24px;
+  }
+  .logos { display: flex; align-items: center; justify-content: center; gap: 26px;
+           background: #fff; border-radius: 16px; padding: 12px 24px; margin-bottom: 18px; }
+  .logos img { height: 54px; width: auto; display: block; }
+  .logos .sep { width: 2px; height: 44px; background: #ddd; }
+
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: 1px; }
+  .lien { font-size: 13px; color: #666; margin-bottom: 20px; }
+
+  #etat { display: flex; align-items: center; gap: 10px; font-size: 14px;
+          color: #888; margin-bottom: 18px; }
+  .pastille { width: 11px; height: 11px; border-radius: 50%; background: #c0392b; }
+  .pastille.on { background: #27ae60; box-shadow: 0 0 10px #27ae60; }
+
+  .carte { background: #161a26; border-radius: 20px; padding: 28px 34px;
+           width: 100%; max-width: 780px; margin-bottom: 20px; }
+
+  .joueur { font-size: 40px; font-weight: 700; text-align: center; margin-bottom: 6px; }
+  .joueur.vide { color: #555; font-size: 26px; font-weight: 400; }
+  .sousTitre { text-align: center; color: #7a8296; font-size: 15px; margin-bottom: 20px; }
+
+  .chrono { font-size: 96px; font-weight: 700; font-family: ui-monospace, monospace;
+            text-align: center; line-height: 1; letter-spacing: 2px; }
+  .chrono.marche { color: #ffd54a; }
+  .chrono.fini   { color: #27ae60; }
+  .chrono.arret  { color: #6b7385; }
+
+  .barreFond { height: 30px; background: #0d0f16; border-radius: 15px;
+               overflow: hidden; margin: 26px 0 10px; }
+  .barre { height: 100%; width: 0%; border-radius: 15px;
+           background: linear-gradient(90deg, #2c7fd4, #27ae60);
+           transition: width .35s ease; }
+  .progTxt { text-align: center; font-size: 19px; color: #b9c0d0; }
+
+  h2 { font-size: 19px; margin: 0 0 12px; color: #7a8296;
+       text-transform: uppercase; letter-spacing: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 21px; }
+  th { text-align: left; color: #6b7385; font-size: 13px; padding: 6px 12px;
+       text-transform: uppercase; letter-spacing: 1px; }
+  td { padding: 11px 12px; border-top: 1px solid #222735; }
+  td.temps { text-align: right; font-family: ui-monospace, monospace; }
+  tr.or  td { color: #ffd700; font-weight: 700; font-size: 24px; }
+  tr.ag  td { color: #c8ccd6; }
+  tr.br  td { color: #cd7f32; }
+  .vide2 { color: #555; text-align: center; padding: 22px; }
+</style>
+</head>
+<body>
+
+  <div class="logos">
+    <img src="logo-gmp.png" alt="IUT GMP Bordeaux" onerror="this.style.display='none'"/>
+    <span class="sep"></span>
+    <img src="logo-cec.png" alt="Course en Cours" onerror="this.style.display='none'"/>
+  </div>
+
+  <h1>ASSEMBLAGE CEC BORDEAUX</h1>
+  <div class="lien">Tableau de bord spectateur</div>
+
+  <div id="etat"><span class="pastille" id="pastille"></span><span id="etatTxt">Connexion...</span></div>
+
+  <div class="carte">
+    <div class="joueur vide" id="joueur">En attente d'un joueur</div>
+    <div class="sousTitre" id="sousTitre">Le casque n'a pas encore demarre de session</div>
+    <div class="chrono arret" id="chrono">00:00:00</div>
+    <div class="barreFond"><div class="barre" id="barre"></div></div>
+    <div class="progTxt" id="progTxt">0 / 0 piece posee</div>
+  </div>
+
+  <div class="carte">
+    <h2>Classement</h2>
+    <div id="classement"><div class="vide2">Aucun score enregistre</div></div>
+  </div>
+
+  <script src="supabase.min.js"></script>
+  <script>
+  (function () {
+    var SB_URL  = 'https://ggmlfbxppgeivfvlxxrj.supabase.co';
+    var SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdnbWxmYnhwcGdlaXZmdmx4eHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNDY5NTIsImV4cCI6MjA5NzkyMjk1Mn0.HvPE2ewB8gFgVzj-xAb1YBxFfn8hTEwOwQLDfF1vgT0';
+    var CANAL   = 'vr-cec-live';
+
+    var elJoueur = document.getElementById('joueur');
+    var elSous   = document.getElementById('sousTitre');
+    var elChrono = document.getElementById('chrono');
+    var elBarre  = document.getElementById('barre');
+    var elProg   = document.getElementById('progTxt');
+    var elClass  = document.getElementById('classement');
+    var elPast   = document.getElementById('pastille');
+    var elEtat   = document.getElementById('etatTxt');
+
+    var dernierMsg = 0;
+
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    function formatTemps(t) {
+      var cs = Math.floor((t % 1000) / 10);
+      var s  = Math.floor(t / 1000) % 60;
+      var m  = Math.floor(t / 60000);
+      return pad(m) + ':' + pad(s) + ':' + pad(cs);
+    }
+    function esc(s) {
+      return (s == null ? '' : String(s)).replace(/[&<>"']/g, function (c) {
+        return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+      });
+    }
+
+    function majEtat(p) {
+      dernierMsg = Date.now();
+      elJoueur.textContent = p.nom || 'En attente d\'un joueur';
+      elJoueur.className = p.nom ? 'joueur' : 'joueur vide';
+
+      elChrono.textContent = formatTemps(p.tempsMs || 0);
+      elChrono.className = 'chrono ' + (p.termine ? 'fini' : (p.enMarche ? 'marche' : 'arret'));
+
+      var total = p.total || 0, posees = p.posees || 0;
+      elBarre.style.width = total ? (posees / total * 100) + '%' : '0%';
+      elProg.textContent = posees + ' / ' + total + (total > 1 ? ' pieces posees' : ' piece posee');
+
+      if (p.termine)          elSous.textContent = 'TERMINE ! Voiture entierement assemblee';
+      else if (p.enMarche)    elSous.textContent = 'Assemblage en cours...';
+      else if (p.enAR)        elSous.textContent = 'En realite augmentee - chrono a l\'arret';
+      else                    elSous.textContent = 'Sur l\'ecran d\'accueil du casque';
+    }
+
+    function majClassement(p) {
+      dernierMsg = Date.now();
+      var scores = (p && p.scores) || [];
+      if (!scores.length) {
+        elClass.innerHTML = '<div class="vide2">Aucun score enregistre</div>';
+        return;
+      }
+      var h = '<table><tr><th>#</th><th>Nom</th><th style="text-align:right">Temps</th></tr>';
+      scores.forEach(function (s, i) {
+        var cls = i === 0 ? 'or' : (i === 1 ? 'ag' : (i === 2 ? 'br' : ''));
+        h += '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td>' + esc(s.nom) +
+             '</td><td class="temps">' + formatTemps(s.temps) + '</td></tr>';
+      });
+      elClass.innerHTML = h + '</table>';
+    }
+
+    // Indicateur de connexion : vert si un message est arrive il y a moins de 5 s
+    setInterval(function () {
+      var actif = (Date.now() - dernierMsg) < 5000;
+      elPast.className = 'pastille' + (actif ? ' on' : '');
+      if (actif) {
+        elEtat.textContent = 'Casque connecte';
+      } else if (dernierMsg) {
+        elEtat.textContent = 'Casque silencieux depuis ' +
+          Math.round((Date.now() - dernierMsg) / 1000) + ' s';
+      }
+    }, 1000);
+
+    try {
+      var client = supabase.createClient(SB_URL, SB_ANON);
+      client.channel(CANAL)
+        .on('broadcast', { event: 'etat' },       function (m) { majEtat(m.payload || {}); })
+        .on('broadcast', { event: 'classement' }, function (m) { majClassement(m.payload || {}); })
+        .subscribe(function (st) {
+          if (st === 'SUBSCRIBED') elEtat.textContent = 'En attente du casque...';
+          else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') elEtat.textContent = 'Erreur de connexion (' + st + ')';
+        });
+    } catch (e) {
+      elEtat.textContent = 'Erreur : ' + e.message;
+    }
+  })();
+  </script>
+</body>
+</html>

@@ -79,6 +79,55 @@ var playerName     = '';
 var sessionComplete = false;
 var piecesAssemblees = [];   // uuids des pieces snappees
 
+// ============ DIFFUSION EN DIRECT (tableau de bord spectateur) ============
+// Mode "broadcast" de Supabase Realtime : rien n'est ecrit en base de donnees,
+// les messages transitent en direct du casque vers la page spectateur.
+// Tout est enrobe de try/catch : si la diffusion echoue, l'appli VR fonctionne normalement.
+var SB_URL  = 'https://ggmlfbxppgeivfvlxxrj.supabase.co';
+var SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdnbWxmYnhwcGdlaXZmdmx4eHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNDY5NTIsImV4cCI6MjA5NzkyMjk1Mn0.HvPE2ewB8gFgVzj-xAb1YBxFfn8hTEwOwQLDfF1vgT0';
+var CANAL_LIVE = 'vr-cec-live';
+
+var canalLive    = null;
+var dernierEnvoi = 0;
+
+function initDiffusion() {
+  try {
+    if (typeof supabase === 'undefined') return;
+    var client = supabase.createClient(SB_URL, SB_ANON);
+    canalLive = client.channel(CANAL_LIVE);
+    canalLive.subscribe();
+  } catch (e) { canalLive = null; }
+}
+
+function envoyer(evenement, donnees) {
+  try {
+    if (!canalLive) return;
+    canalLive.send({ type: 'broadcast', event: evenement, payload: donnees });
+  } catch (e) {}
+}
+
+// Etat courant (nom, chrono, progression). Limite a ~3 envois/seconde.
+function diffuserEtat(force) {
+  var maintenant = performance.now();
+  if (!force && maintenant - dernierEnvoi < 330) return;
+  dernierEnvoi = maintenant;
+  envoyer('etat', {
+    nom:      playerName,
+    tempsMs:  Math.round(tempsActuel()),
+    enMarche: chrono.enMarche,
+    posees:   piecesAssemblees.length,
+    total:    pieceData.length,
+    enAR:     !!(renderer && renderer.xr && renderer.xr.getSession()),
+    termine:  sessionComplete,
+    ts:       Date.now()
+  });
+}
+
+function diffuserClassement() {
+  envoyer('classement', { scores: chargerScores() });
+}
+// ========== FIN DIFFUSION ==========
+
 // --- Verification Three.js ---
 status.textContent = 'Three.js OK: ' + (typeof THREE !== 'undefined');
 
@@ -775,12 +824,15 @@ controllers.forEach(function (ctrl, idx) {
         if (piecesAssemblees.indexOf(objet.uuid) < 0) {
           piecesAssemblees.push(objet.uuid);
         }
+        diffuserEtat(true); // progression immediate sur le tableau de bord
         // Verifier si toutes les pieces sont assemblees
         if (piecesAssemblees.length === pieceData.length && !sessionComplete) {
           sessionComplete = true;
           arreter();
           var tFinal = chrono.cumul;
           sauvegarderScore(playerName, tFinal);
+          diffuserEtat(true);
+          diffuserClassement();
           lancerFeuxArtifice();
           // Fermer la session AR apres le feu d'artifice (6 s)
           setTimeout(function () {
@@ -940,6 +992,9 @@ renderer.setAnimationLoop(function (time, frame) {
   if (dt > 0.1) dt = 0.1;
   if (feux.length) majFeux(dt);
 
+  // Diffusion de l'etat vers le tableau de bord spectateur
+  diffuserEtat(false);
+
   dessiner();
   renderer.render(scene, camera);
 });
@@ -1032,6 +1087,7 @@ document.getElementById('btnCodeOK').addEventListener('click', function () {
   if (code === '1234') {
     effacerScores();
     afficherClassement();
+    diffuserClassement();
     document.getElementById('raz-zone').style.display = 'none';
   } else {
     document.getElementById('raz-erreur').textContent = 'Code incorrect';
@@ -1041,5 +1097,9 @@ document.getElementById('btnCodeOK').addEventListener('click', function () {
 
 // --- Affichage initial ---
 montrerEcranNom();
+
+// --- Diffusion en direct : connexion + envoi du classement actuel ---
+initDiffusion();
+setTimeout(function () { diffuserClassement(); diffuserEtat(true); }, 1500);
 
 }); // fin window.addEventListener('load', ...)
