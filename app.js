@@ -106,12 +106,26 @@ function envoyer(evenement, donnees) {
   } catch (e) {}
 }
 
-// Etat courant (nom, chrono, progression). Limite a ~3 envois/seconde.
+// Outils de compression : transform d'un objet exprime dans le repere de l'ancre
+var _mA = new THREE.Matrix4(), _mB = new THREE.Matrix4();
+var _vP = new THREE.Vector3(), _vQ = new THREE.Quaternion(), _vS = new THREE.Vector3();
+function nb3(v) { return Math.round(v * 1000) / 1000; }
+function transformRelAncre(obj) {
+  obj.updateMatrixWorld();
+  _mA.copy(anchor.matrixWorld).invert();
+  _mB.multiplyMatrices(_mA, obj.matrixWorld);
+  _mB.decompose(_vP, _vQ, _vS);
+  return [nb3(_vP.x), nb3(_vP.y), nb3(_vP.z),
+          nb3(_vQ.x), nb3(_vQ.y), nb3(_vQ.z), nb3(_vQ.w)];
+}
+
+// Etat courant + geometrie de la scene (~8 envois/seconde).
 function diffuserEtat(force) {
   var maintenant = performance.now();
-  if (!force && maintenant - dernierEnvoi < 330) return;
+  if (!force && maintenant - dernierEnvoi < 125) return;
   dernierEnvoi = maintenant;
-  envoyer('etat', {
+
+  var msg = {
     nom:      playerName,
     tempsMs:  Math.round(tempsActuel()),
     enMarche: chrono.enMarche,
@@ -119,8 +133,23 @@ function diffuserEtat(force) {
     total:    pieceData.length,
     enAR:     !!(renderer && renderer.xr && renderer.xr.getSession()),
     termine:  sessionComplete,
+    pose:     anchorPlaced,
     ts:       Date.now()
-  });
+  };
+
+  // Geometrie : pieces + manettes + tete, dans le repere de l'ancre
+  if (pieceData.length && anchorPlaced) {
+    try {
+      anchor.updateMatrixWorld(true);
+      var P = [];
+      for (var i = 0; i < pieceData.length; i++) P.push(transformRelAncre(pieceData[i].objet));
+      msg.p = P;
+      msg.m = [transformRelAncre(controllers[0]), transformRelAncre(controllers[1])];
+      msg.t = transformRelAncre(camera);
+    } catch (e) {}
+  }
+
+  envoyer('etat', msg);
 }
 
 function diffuserClassement() {
