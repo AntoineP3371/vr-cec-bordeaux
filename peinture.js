@@ -103,14 +103,22 @@ var canalLive = null;
 var canalPret = false;
 var SID = Math.random().toString(36).slice(2, 10);
 var messagePhoto = '';        // texte temporaire affiche sur le bouton PHOTO
+var opSeq = 0;                // numero unique par operation de decoration
+
+function nb(v) { return Math.round(v * 100000) / 100000; }
 
 function initDiffusion() {
   try {
     if (typeof supabase === 'undefined') return;
     var client = supabase.createClient(SB_URL, SB_ANON);
     canalLive = client.channel(CANAL_DECO);
+    // Un spectateur qui arrive demande l'etat courant : on lui envoie l'instantane
+    canalLive.on('broadcast', { event: 'join' }, function () {
+      if (carPret) envoyer('snap', construireSnap());
+    });
     canalLive.subscribe(function (statut) {
       canalPret = (statut === 'SUBSCRIBED');
+      if (canalPret) diffuserPresence(true);
       majPanneau();
     });
   } catch (e) { canalLive = null; canalPret = false; }
@@ -188,18 +196,51 @@ function capturer(largeur, hauteur, qualite) {
   }
 }
 
-// Vue en direct : petite image envoyee regulierement
-var dernierLive = 0;
-function diffuserLive(force) {
+// ---- Vue en direct : on diffuse les DONNEES de decoration (comme le jeu
+// d'assemblage), pas une image du casque. L'ecran spectateur reconstruit la
+// voiture en 3D avec le meme modele. Trois messages :
+//   'pres'  ~5 fois/s : presence + rotation de la voiture (fluidite)
+//   'add'   a chaque action : une operation a rejouer
+//   'del'   annulation / gomme : operations a retirer
+//   'clr'   tout effacer
+//   'snap'  etat complet, envoye a un spectateur qui vient d'arriver
+var dernierePres = 0;
+function diffuserPresence(force) {
   var t = performance.now();
-  if (!force && t - dernierLive < 2500) return;
-  dernierLive = t;
-  if (!canalPret) return;
-  var img = capturer(192, 144, 0.45);
-  envoyer('live', {
-    sid: SID, equipe: equipe, actions: actions.length,
-    img: img || null, ts: Date.now()
+  if (!force && t - dernierePres < 200) return;
+  dernierePres = t;
+  envoyer('pres', {
+    sid: SID, equipe: equipe,
+    rotY: carGroup.rotation.y, nb: actions.length, ts: Date.now()
   });
+}
+
+function diffuserAjout(id, op)  { envoyer('add', { sid: SID, equipe: equipe, id: id, op: op }); }
+function diffuserRetrait(ids)   { envoyer('del', { sid: SID, ids: ids }); }
+function diffuserClear()        { envoyer('clr', { sid: SID, equipe: equipe }); }
+
+// Etat complet : les couleurs de pieces modifiees + tous les decalques visibles.
+// On lit l'etat REEL (et non la pile d'actions) pour que la gomme soit
+// correctement reflechie.
+function construireSnap() {
+  var fills = [];
+  pieces.forEach(function (o, pi) {
+    var orig = o.userData.couleursOrigine || [];
+    if (Array.isArray(o.material)) {
+      o.material.forEach(function (m, mi) {
+        if (m.color.getHex() !== orig[mi]) fills.push({ p: pi, mi: mi, c: m.color.getHex() });
+      });
+    } else if (o.material.color.getHex() !== orig[0]) {
+      fills.push({ p: pi, mi: 0, c: o.material.color.getHex() });
+    }
+  });
+  var decals = [];
+  carGroup.children.forEach(function (o) {
+    if (o.userData && o.userData.decal && o.userData.payload) {
+      decals.push({ id: o.userData.opId, op: o.userData.payload });
+    }
+  });
+  return { sid: SID, equipe: equipe, rotY: carGroup.rotation.y, fills: fills, decals: decals };
 }
 
 // Photo definitive, ajoutee a la galerie du spectateur
@@ -523,6 +564,36 @@ function geoDecal(inter, taille, rotation) {
   return geo;
 }
 
+// Parametres compacts permettant a l'ecran spectateur de recreer le MEME
+// decalque : indice de piece + point + ORIENTATION COMPLETE (quaternion)
+// exprimes dans le repere de la voiture (donc independants de sa rotation) +
+// taille. On stocke le quaternion et non "normale + rotation" : l'orientation
+// du motif autour de la normale depend sinon du "haut" du monde, et le decalque
+// serait vrille differemment sur une voiture tournee autrement.
+var _qInv = new THREE.Quaternion();
+var _qW   = new THREE.Quaternion();
+var _orP  = new THREE.Object3D();   // reproduit le projecteur pour lire son orientation
+function paramsDecal(inter, tailleVec, rotation) {
+  var mesh = inter.object;
+  var pi = pieces.indexOf(mesh);
+  var lp = carGroup.worldToLocal(inter.point.clone());
+
+  // Orientation monde du projecteur, exactement comme dans geoDecal
+  var n = inter.face.normal.clone().transformDirection(mesh.matrixWorld);
+  _orP.position.copy(inter.point);
+  _orP.lookAt(inter.point.clone().add(n));
+  _orP.rotateZ(rotation || 0);
+  _qW.copy(_orP.quaternion);                 // sans parent : monde = local
+
+  // Passage dans le repere de la voiture
+  carGroup.getWorldQuaternion(_qInv).invert();
+  var qL = _qInv.multiply(_qW);
+
+  return [pi, nb(lp.x), nb(lp.y), nb(lp.z),
+          nb(qL.x), nb(qL.y), nb(qL.z), nb(qL.w),
+          nb(tailleVec.x), nb(tailleVec.y), nb(tailleVec.z)];
+}
+
 // Fusionne plusieurs geometries de decalques en une seule.
 // Toutes sont en coordonnees MONDE, donc concatener les attributs suffit.
 // C'est ce qui permet qu'un trace de 300 taches ne coute qu'UN seul appel de
@@ -616,9 +687,16 @@ function annuler() {
   if (!actions.length) return;
   var a = actions.pop();
 
-  if (a.type === 'peinture')      carGroup.remove(a.mesh);
-  else if (a.type === 'couleur')  appliquerCouleur(a, false);
-  else if (a.type === 'gomme')    a.meshes.forEach(function (m) { carGroup.add(m); });
+  if (a.type === 'peinture') {
+    carGroup.remove(a.mesh);
+    diffuserRetrait([a.opId]);
+  } else if (a.type === 'couleur') {
+    appliquerCouleur(a, false);
+    diffuserRetrait([a.opId]);            // le spectateur revient a la couleur d'avant
+  } else if (a.type === 'gomme') {
+    a.meshes.forEach(function (m) { carGroup.add(m); });
+    a.meshes.forEach(function (m) { diffuserAjout(m.userData.opId, m.userData.payload); });
+  }
 
   refaire.push(a);
   majPanneau();
@@ -628,9 +706,16 @@ function retablir() {
   if (!refaire.length) return;
   var a = refaire.pop();
 
-  if (a.type === 'peinture')      carGroup.add(a.mesh);
-  else if (a.type === 'couleur')  appliquerCouleur(a, true);
-  else if (a.type === 'gomme')    a.meshes.forEach(function (m) { carGroup.remove(m); });
+  if (a.type === 'peinture') {
+    carGroup.add(a.mesh);
+    diffuserAjout(a.opId, a.payload);
+  } else if (a.type === 'couleur') {
+    appliquerCouleur(a, true);
+    diffuserAjout(a.opId, a.payload);
+  } else if (a.type === 'gomme') {
+    a.meshes.forEach(function (m) { carGroup.remove(m); });
+    diffuserRetrait(a.removedIds);
+  }
 
   actions.push(a);
   majPanneau();
@@ -655,6 +740,7 @@ function toutEffacer() {
   actions.length = 0;
   refaire.length = 0;
   majPanneau();
+  diffuserClear();
 }
 
 // ============================================================================
@@ -743,6 +829,7 @@ var peintureEnCours = -1;
 var dernierDab      = new THREE.Vector3();
 var aDejaDab        = false;
 var traceGeos       = [];    // geometries accumulees pendant le trace courant
+var traceParams     = [];    // parametres correspondants (pour le spectateur)
 var traceMat        = null;
 var gommeLot        = [];    // decalques effaces pendant le coup de gomme courant
 
@@ -775,7 +862,10 @@ function remplirPiece(inter) {
 
   var a = { type: 'couleur', mesh: o, idx: idx, avant: avant, apres: apres };
   appliquerCouleur(a, true);
+  a.opId = ++opSeq;
+  a.payload = { k: 'f', p: pieces.indexOf(o), mi: idx, c: apres, c0: avant };
   empiler(a);
+  diffuserAjout(a.opId, a.payload);
 }
 
 // Efface les decalques proches du point vise (les meshes sont conserves pour
@@ -824,8 +914,13 @@ function actionPanneau(cle) {
 // Une tache de peinture pendant un trace
 function ajouterDab(inter) {
   var s = TAILLE_SPRAY[tailleIdx];
-  var geo = geoDecal(inter, new THREE.Vector3(s, s, s), Math.random() * Math.PI * 2);
-  if (geo) traceGeos.push(geo);
+  var sz = new THREE.Vector3(s, s, s);
+  var rot = Math.random() * Math.PI * 2;
+  var geo = geoDecal(inter, sz, rot);
+  if (geo) {
+    traceGeos.push(geo);
+    traceParams.push(paramsDecal(inter, sz, rot));   // meme rot que la geometrie
+  }
 }
 
 controllers.forEach(function (ctrl, idx) {
@@ -858,15 +953,22 @@ controllers.forEach(function (ctrl, idx) {
       // On colle l'apercu tel qu'il est affiche
       var L = TAILLE_LOGO[tailleIdx];
       var prof = Math.max(L * 0.5, 0.025);
-      var geo = geoDecal(hits[0],
-                  new THREE.Vector3(L * LOGOS[logoIdx].ratio, L, prof), rotationLogo);
+      var szL = new THREE.Vector3(L * LOGOS[logoIdx].ratio, L, prof);
+      var geo = geoDecal(hits[0], szL, rotationLogo);
       if (geo) {
+        var params = paramsDecal(hits[0], szL, rotationLogo);
         var m = poserMesh([geo], matLogo(logoIdx));
-        if (m) empiler({ type: 'peinture', mesh: m });
+        if (m) {
+          m.userData.opId = ++opSeq;
+          m.userData.payload = { k: 'l', li: logoIdx, d: [params] };
+          empiler({ type: 'peinture', mesh: m, opId: m.userData.opId, payload: m.userData.payload });
+          diffuserAjout(m.userData.opId, m.userData.payload);
+        }
       }
 
     } else if (mode === 'pinceau') {
       traceGeos = [];
+      traceParams = [];
       traceMat  = matSpray(couleurCourante());
       ajouterDab(hits[0]);
       peintureEnCours = idx;
@@ -893,10 +995,18 @@ controllers.forEach(function (ctrl, idx) {
       nettoyerProvisoires();
       // Tout le trace devient UN seul mesh : 1 appel de rendu, 1 seule annulation
       var m = poserMesh(traceGeos, traceMat);
-      traceGeos = [];
-      if (m) empiler({ type: 'peinture', mesh: m });
+      var params = traceParams;
+      traceGeos = []; traceParams = [];
+      if (m) {
+        m.userData.opId = ++opSeq;
+        m.userData.payload = { k: 'p', c: couleurCourante(), d: params };
+        empiler({ type: 'peinture', mesh: m, opId: m.userData.opId, payload: m.userData.payload });
+        diffuserAjout(m.userData.opId, m.userData.payload);
+      }
     } else if (mode === 'gomme' && gommeLot.length) {
-      empiler({ type: 'gomme', meshes: gommeLot });
+      var ids = gommeLot.map(function (g) { return g.userData.opId; });
+      empiler({ type: 'gomme', meshes: gommeLot, removedIds: ids });
+      diffuserRetrait(ids);
       gommeLot = [];
     }
   });
@@ -1087,8 +1197,8 @@ renderer.setAnimationLoop(function (time, frame) {
   if (panneauSale) dessinerPanneau();
   renderer.render(scene, camera);
 
-  // Vue en direct vers l'ecran spectateur (apres le rendu, ~1 image / 2,5 s)
-  if (anchorPlaced && carPret) diffuserLive(false);
+  // Presence + rotation vers l'ecran spectateur (~5 fois/s)
+  if (anchorPlaced && carPret) diffuserPresence(false);
 });
 
 // ============================================================================
@@ -1117,9 +1227,13 @@ document.getElementById('btnCommencer').addEventListener('click', function () {
   rotationManette = -1;
   rotationLogo = 0;
   traceGeos = [];
+  traceParams = [];
   provisoires = [];
   traceAffichees = 0;
   majPanneau();
+  // Nouvelle session : on annonce l'equipe et on repart d'une voiture vierge
+  diffuserClear();
+  diffuserPresence(true);
 
   navigator.xr.requestSession('immersive-ar', {
     optionalFeatures: ['hit-test', 'local-floor', 'local']

@@ -6,67 +6,73 @@
 <title>Spectateur - Deco CEC Bordeaux</title>
 <style>
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
-    margin: 0; min-height: 100vh; background: #0d0d12; color: #fff;
-    font-family: sans-serif; padding: 16px;
+    margin: 0; background: #0d0d12; color: #fff; font-family: sans-serif;
+    display: flex; flex-direction: column; padding: 12px; gap: 10px;
   }
-  header { display: flex; align-items: center; gap: 18px; margin-bottom: 16px; flex-wrap: wrap; }
-  header .logos { display: flex; align-items: center; gap: 16px;
-                  background: #fff; border-radius: 12px; padding: 8px 16px; }
-  header .logos img { height: 44px; display: block; }
-  h1 { font-size: 21px; margin: 0; }
+  header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header .logos { display: flex; align-items: center; gap: 14px;
+                  background: #fff; border-radius: 12px; padding: 7px 14px; }
+  header .logos img { height: 40px; display: block; }
+  h1 { font-size: 19px; margin: 0; }
   .etat { margin-left: auto; font-size: 13px; color: #999; display: flex;
           align-items: center; gap: 8px; }
   .pastille { width: 10px; height: 10px; border-radius: 50%; background: #666; }
   .pastille.on { background: #27ae60; }
+  label.suivi { font-size: 13px; color: #bbb; display: flex; align-items: center; gap: 6px; }
 
-  .colonnes { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+  /* Grille : la vue en direct au centre, les photos tout autour.
+     grid-auto-flow: dense fait remplir les cases autour de la vue centrale. */
+  .grille {
+    flex: 1; display: grid; gap: 10px; min-height: 0;
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: 1fr; grid-auto-flow: dense;
+  }
+  .direct {
+    grid-column: 2 / 4; grid-row: 1 / 3;
+    background: #10161f; border: 2px solid #2c5aa0; border-radius: 16px;
+    position: relative; overflow: hidden; display: flex; flex-direction: column;
+  }
+  .direct .titre { position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+    padding: 8px 12px; font-size: 16px; font-weight: bold;
+    background: linear-gradient(#000a, #0000); display: flex; align-items: center; gap: 8px; }
+  .direct .titre .dot { width: 9px; height: 9px; border-radius: 50%; background: #27ae60; }
+  .direct canvas { width: 100%; height: 100%; display: block; }
+  .direct .photoPlein { position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain; background: #0a0a10; display: none; }
+  .direct .rien { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; color: #556; font-size: 14px; text-align: center; padding: 20px; }
 
-  /* ---- Vue en direct ---- */
-  .direct { flex: 0 0 420px; background: #16161f; border: 2px solid #2a2a35;
-            border-radius: 16px; padding: 14px; }
-  .direct h2 { font-size: 15px; margin: 0 0 10px; color: #4aa3df;
-               text-transform: uppercase; letter-spacing: .5px; }
-  .direct .cadre { width: 100%; aspect-ratio: 4/3; background: #0a0a10;
-                   border-radius: 10px; overflow: hidden; display: flex;
-                   align-items: center; justify-content: center; }
-  .direct .cadre img { width: 100%; height: 100%; object-fit: contain; }
-  .direct .vide { color: #555; font-size: 13px; text-align: center; padding: 20px; }
-  .direct .equipe { font-size: 20px; font-weight: bold; margin-top: 10px; }
-  .direct .infos { font-size: 13px; color: #999; margin-top: 2px; }
+  .tuile {
+    background: #16161f; border: 1px solid #2a2a35; border-radius: 12px;
+    overflow: hidden; cursor: pointer; position: relative; min-height: 90px;
+    display: flex; flex-direction: column; transition: border-color .15s, transform .12s;
+  }
+  .tuile:hover { border-color: #27ae60; transform: translateY(-2px); }
+  .tuile.actif { border-color: #ffd000; }
+  .tuile img { width: 100%; flex: 1; object-fit: cover; display: block; min-height: 0; }
+  .tuile .ph { flex: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 30px; font-weight: bold; color: #2c5aa0; background: #1b2330; }
+  .tuile .lg { padding: 5px 8px; font-size: 12px; font-weight: bold; display: flex;
+    align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tuile .lg .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; flex: none; }
+  .tuile .lg .dot.live { background: #27ae60; }
 
-  /* ---- Galerie ---- */
-  .galerie { flex: 1 1 520px; min-width: 320px; }
-  .galerie h2 { font-size: 15px; margin: 0 0 10px; color: #27ae60;
-                text-transform: uppercase; letter-spacing: .5px; }
-  .grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 12px; }
-  .carte { background: #16161f; border: 1px solid #2a2a35; border-radius: 12px;
-           overflow: hidden; cursor: pointer; transition: border-color .15s, transform .15s; }
-  .carte:hover { border-color: #27ae60; transform: translateY(-3px); }
-  .carte img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; }
-  .carte .nom { padding: 7px 9px; font-size: 13px; font-weight: bold;
-                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .carte .h   { padding: 0 9px 8px; font-size: 11px; color: #777; }
-  .galerie .vide { color: #555; font-size: 13px; padding: 30px 0; }
-
-  .barre { margin-top: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  button { padding: 9px 16px; font-size: 13px; border: none; border-radius: 9px;
-           background: #333; color: #fff; cursor: pointer; }
+  footer { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+           font-size: 12px; color: #777; }
+  footer a { color: #4aa3df; }
+  footer .sep { flex: 1; }
+  input[type=password] { padding: 7px 10px; border-radius: 8px; border: 1px solid #444;
+    background: #1a1a1a; color: #fff; width: 90px; text-align: center; }
+  button { padding: 7px 14px; font-size: 12px; border: none; border-radius: 8px;
+    background: #333; color: #fff; cursor: pointer; }
   button.danger { background: #8e2b2b; }
-  input[type=password] { padding: 9px 12px; border-radius: 9px; border: 1px solid #444;
-           background: #1a1a1a; color: #fff; width: 110px; text-align: center; }
-  .compteur { font-size: 12px; color: #777; }
 
-  /* ---- Agrandissement ---- */
   #zoom { position: fixed; inset: 0; background: rgba(0,0,0,.9); display: none;
-          align-items: center; justify-content: center; flex-direction: column;
-          gap: 14px; z-index: 50; padding: 20px; }
+    align-items: center; justify-content: center; flex-direction: column; gap: 14px; z-index: 50; padding: 20px; }
   #zoom img { max-width: 92vw; max-height: 78vh; border-radius: 12px; }
   #zoom .nom { font-size: 24px; font-weight: bold; }
-
-  footer { margin-top: 20px; font-size: 11px; color: #555; text-align: center; }
-  footer a { color: #4aa3df; }
 </style>
 </head>
 <body>
@@ -77,32 +83,28 @@
     <img src="logo-cec.png" alt="Course en Cours" onerror="this.style.display='none'"/>
   </div>
   <h1>Deco CEC Bordeaux &mdash; ecran spectateur</h1>
+  <label class="suivi"><input type="checkbox" id="autoSuivi" checked/> suivre l'equipe active</label>
   <div class="etat"><span class="pastille" id="pastille"></span><span id="etatTxt">Connexion...</span></div>
 </header>
 
-<div class="colonnes">
-
-  <section class="direct">
-    <h2>En direct depuis le casque</h2>
-    <div class="cadre" id="cadreLive">
-      <div class="vide">En attente d'un joueur...</div>
-    </div>
-    <div class="equipe" id="liveEquipe">&mdash;</div>
-    <div class="infos" id="liveInfos"></div>
+<div class="grille" id="grille">
+  <section class="direct" id="direct">
+    <div class="titre"><span class="dot" id="liveDot" style="display:none"></span><span id="liveNom">En attente d'un casque...</span></div>
+    <canvas id="vue3d"></canvas>
+    <img class="photoPlein" id="photoPlein" alt=""/>
+    <div class="rien" id="rienLive">Aucun casque connecte pour le moment.<br/>Lance la Decoration dans le Quest.</div>
   </section>
-
-  <section class="galerie">
-    <h2>Voitures terminees <span class="compteur" id="compteur"></span></h2>
-    <div class="grille" id="grille"></div>
-    <div class="vide" id="galerieVide">Aucune photo pour l'instant. Dans le casque, appuie sur PHOTO.</div>
-    <div class="barre">
-      <input type="password" id="code" placeholder="code" maxlength="4"/>
-      <button class="danger" id="btnVider">Vider la galerie</button>
-      <span class="compteur">La galerie garde les 20 dernieres voitures, meme apres rechargement.</span>
-    </div>
-  </section>
-
+  <!-- les tuiles photos sont injectees ici, autour de la vue centrale -->
 </div>
+
+<footer>
+  <a href="index.html">&#8592; Menu principal</a>
+  <span id="compteur"></span>
+  <span class="sep"></span>
+  <input type="password" id="code" placeholder="code" maxlength="4"/>
+  <button class="danger" id="btnVider">Vider les photos</button>
+  <span>v7.2.0</span>
+</footer>
 
 <div id="zoom">
   <img id="zoomImg" alt=""/>
@@ -110,146 +112,490 @@
   <button id="zoomFermer">Fermer</button>
 </div>
 
-<footer>
-  <a href="index.html">&#8592; Retour au menu</a> &nbsp;|&nbsp;
-  <a href="spectateur.html">Tableau de bord Assemblage</a>
-  &nbsp;|&nbsp; v7.1.0
-</footer>
-
+<script src="three.min.js"></script>
+<script src="GLTFLoader.js"></script>
+<script src="DecalGeometry.js"></script>
 <script src="supabase.min.js"></script>
 <script>
 (function () {
+  'use strict';
+
   var SB_URL  = 'https://ggmlfbxppgeivfvlxxrj.supabase.co';
   var SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdnbWxmYnhwcGdlaXZmdmx4eHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNDY5NTIsImV4cCI6MjA5NzkyMjk1Mn0.HvPE2ewB8gFgVzj-xAb1YBxFfn8hTEwOwQLDfF1vgT0';
   var CANAL   = 'vr-cec-deco';
-  var CLE     = 'cec_deco_galerie';
-  var MAX     = 20;
+  var CLE_PHOTOS = 'cec_deco_photos';
+  var MAX_PHOTOS = 20;
 
-  var elPast = document.getElementById('pastille');
-  var elEtat = document.getElementById('etatTxt');
-  var elCadre = document.getElementById('cadreLive');
-  var elEquipe = document.getElementById('liveEquipe');
-  var elInfos = document.getElementById('liveInfos');
-  var elGrille = document.getElementById('grille');
-  var elVide = document.getElementById('galerieVide');
-  var elCompteur = document.getElementById('compteur');
+  // ---------- palette / logos (identiques a l'appli casque) ----------
+  var LOGOS = ['logo-cec.png', 'logo-gmp.png'];
 
-  // ---- Galerie (conservee dans le navigateur du PC) ----
-  function charger() {
-    try { return JSON.parse(localStorage.getItem(CLE)) || []; } catch (e) { return []; }
+  // ============================ SCENE 3D ============================
+  var canvas = document.getElementById('vue3d');
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x10161f, 1);
+
+  var scene = new THREE.Scene();
+  scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+  var dl = new THREE.DirectionalLight(0xffffff, 1); dl.position.set(1, 2, 1); scene.add(dl);
+  var dl2 = new THREE.DirectionalLight(0xffffff, 0.4); dl2.position.set(-1, 1, -1); scene.add(dl2);
+
+  var camera = new THREE.PerspectiveCamera(45, 1, 0.01, 20);
+  var cible = new THREE.Vector3(0, 0.09, 0);
+
+  // Orbite souris (rotation + zoom molette)
+  var orbit = { theta: 0.7, phi: 1.15, rayon: 0.55 };
+  function placerCamera() {
+    var r = orbit.rayon, p = orbit.phi;
+    camera.position.set(
+      cible.x + r * Math.sin(p) * Math.sin(orbit.theta),
+      cible.y + r * Math.cos(p),
+      cible.z + r * Math.sin(p) * Math.cos(orbit.theta)
+    );
+    camera.lookAt(cible);
   }
-  function sauver(g) {
-    try { localStorage.setItem(CLE, JSON.stringify(g)); }
-    catch (e) {
-      // Quota depasse : on retire les plus anciennes jusqu'a ce que ca rentre
-      while (g.length > 1) {
-        g.pop();
-        try { localStorage.setItem(CLE, JSON.stringify(g)); return; } catch (e2) {}
+  (function () {
+    var drag = false, lx = 0, ly = 0;
+    canvas.addEventListener('mousedown', function (e) { drag = true; lx = e.clientX; ly = e.clientY; });
+    window.addEventListener('mouseup', function () { drag = false; });
+    window.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      orbit.theta -= (e.clientX - lx) * 0.01;
+      orbit.phi = Math.max(0.2, Math.min(2.6, orbit.phi - (e.clientY - ly) * 0.01));
+      lx = e.clientX; ly = e.clientY;
+    });
+    canvas.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      orbit.rayon = Math.max(0.2, Math.min(1.5, orbit.rayon + e.deltaY * 0.0006));
+    }, { passive: false });
+  })();
+
+  function redim() {
+    var w = canvas.clientWidth || 1, h = canvas.clientHeight || 1;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', redim);
+
+  // ---------- materiaux des decalques (memes reglages que le casque) ----------
+  function textureSpray() {
+    var c = document.createElement('canvas'); c.width = c.height = 64;
+    var g = c.getContext('2d');
+    var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.55, 'rgba(255,255,255,0.95)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+  var texSpray = textureSpray();
+  var matSprayCache = {};
+  function matSpray(couleur) {
+    if (!matSprayCache[couleur]) {
+      matSprayCache[couleur] = new THREE.MeshStandardMaterial({
+        map: texSpray, color: couleur, roughness: 0.55, metalness: 0,
+        transparent: true, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
+      });
+    }
+    return matSprayCache[couleur];
+  }
+  var texLoader = new THREE.TextureLoader();
+  var matLogoCache = {};
+  function matLogo(i) {
+    if (!matLogoCache[i]) {
+      var t = texLoader.load(LOGOS[i]); t.anisotropy = 4;
+      matLogoCache[i] = new THREE.MeshStandardMaterial({
+        map: t, roughness: 0.5, metalness: 0, transparent: true, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4
+      });
+    }
+    return matLogoCache[i];
+  }
+
+  // ---------- voiture reconstruite (une seule, celle de l'equipe affichee) ----------
+  var gltfBase = null;
+  var liveGroup = null;
+  var livePieces = [];
+  var orienteur = new THREE.Object3D();
+  var _tmpQ = new THREE.Quaternion();
+
+  new THREE.GLTFLoader().load('Voiture_CEC_Bordeaux.glb', function (g) {
+    gltfBase = g;
+    construireVoiture();
+    if (focusSid) rebatir(focusSid);
+  });
+
+  // Cree le groupe voiture (meme logique de chargement que le casque)
+  function construireVoiture() {
+    var root = gltfBase.scene.clone(true);
+    var b0 = new THREE.Box3().setFromObject(root), t0 = new THREE.Vector3(); b0.getSize(t0);
+    root.scale.setScalar(0.30 / Math.max(t0.x, t0.y, t0.z));
+    root.updateMatrixWorld(true);
+    var bb = new THREE.Box3().setFromObject(root), c = new THREE.Vector3(); bb.getCenter(c);
+    root.position.sub(c);
+    root.position.y += (c.y - bb.min.y) + 0.01;
+
+    liveGroup = new THREE.Group();
+    liveGroup.add(root);
+    livePieces = [];
+    root.traverse(function (o) {
+      if (!o.isMesh) return;
+      if (Array.isArray(o.material)) {
+        o.material = o.material.map(function (m) { return m.clone(); });
+        o.userData.couleursOrigine = o.material.map(function (m) { return m.color.getHex(); });
+      } else {
+        o.material = o.material.clone();
+        o.userData.couleursOrigine = [o.material.color.getHex()];
+      }
+      livePieces.push(o);
+    });
+    scene.add(liveGroup);
+    liveGroup.updateMatrixWorld(true);
+    redim();
+  }
+
+  // Enleve tous les decalques et remet les couleurs d'origine
+  function viderVoiture() {
+    if (!liveGroup) return;
+    for (var i = liveGroup.children.length - 1; i >= 0; i--) {
+      var o = liveGroup.children[i];
+      if (o.userData && o.userData.decal) { liveGroup.remove(o); if (o.geometry) o.geometry.dispose(); }
+    }
+    livePieces.forEach(function (o) {
+      var orig = o.userData.couleursOrigine;
+      if (Array.isArray(o.material)) o.material.forEach(function (m, k) { m.color.setHex(orig[k]); });
+      else o.material.color.setHex(orig[0]);
+    });
+  }
+
+  // Construit la geometrie d'un decalque a partir des parametres diffuses :
+  // [piece, x,y,z (point local), qx,qy,qz,qw (orientation locale), sx,sy,sz (taille)]
+  var _euler = new THREE.Euler();
+  function geoDab(d) {
+    var mesh = livePieces[d[0]];
+    if (!mesh) return null;
+    liveGroup.updateMatrixWorld(true);
+    var wp = liveGroup.localToWorld(new THREE.Vector3(d[1], d[2], d[3]));
+    // orientation locale -> monde, en tenant compte de la rotation actuelle de la voiture
+    var qL = new THREE.Quaternion(d[4], d[5], d[6], d[7]);
+    var qW = liveGroup.getWorldQuaternion(_tmpQ).clone().multiply(qL);
+    _euler.setFromQuaternion(qW);
+    var geo;
+    try { geo = new THREE.DecalGeometry(mesh, wp, _euler, new THREE.Vector3(d[8], d[9], d[10])); }
+    catch (e) { return null; }
+    if (!geo.attributes.position || geo.attributes.position.count === 0) { geo.dispose(); return null; }
+    return geo;
+  }
+
+  function fusionner(geos) {
+    var total = 0, i;
+    for (i = 0; i < geos.length; i++) total += geos[i].attributes.position.count;
+    var pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), uv = new Float32Array(total * 2);
+    var o3 = 0, o2 = 0;
+    for (i = 0; i < geos.length; i++) {
+      var g = geos[i];
+      pos.set(g.attributes.position.array, o3);
+      nor.set(g.attributes.normal.array, o3);
+      uv.set(g.attributes.uv.array, o2);
+      o3 += g.attributes.position.count * 3; o2 += g.attributes.position.count * 2;
+      g.dispose();
+    }
+    var out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    return out;
+  }
+
+  // Applique une operation a la voiture affichee
+  function appliquer(id, op) {
+    if (!liveGroup) return;
+    if (op.k === 'f') {
+      var o = livePieces[op.p];
+      if (!o) return;
+      if (Array.isArray(o.material)) { if (o.material[op.mi]) o.material[op.mi].color.setHex(op.c); }
+      else o.material.color.setHex(op.c);
+      return;
+    }
+    // decalque (pinceau 'p' ou logo 'l')
+    var geos = [];
+    for (var i = 0; i < op.d.length; i++) { var g = geoDab(op.d[i]); if (g) geos.push(g); }
+    if (!geos.length) return;
+    var mat = (op.k === 'l') ? matLogo(op.li) : matSpray(op.c);
+    var geo = fusionner(geos);
+    var m = new THREE.Mesh(geo, mat);
+    m.userData.decal = true; m.userData.opId = id;
+    scene.add(m); liveGroup.attach(m);
+  }
+
+  function retirerDecal(id) {
+    if (!liveGroup) return;
+    for (var i = liveGroup.children.length - 1; i >= 0; i--) {
+      var o = liveGroup.children[i];
+      if (o.userData && o.userData.decal && o.userData.opId === id) {
+        liveGroup.remove(o); if (o.geometry) o.geometry.dispose();
       }
     }
   }
 
-  var galerie = charger();
-
-  function heure(ts) {
-    var d = new Date(ts || Date.now());
-    return ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
+  // Reconstruit entierement la voiture affichee depuis les operations d'une equipe
+  function rebatir(sid) {
+    if (!liveGroup || !gltfBase) return;
+    viderVoiture();
+    var t = equipes[sid];
+    if (!t) return;
+    liveGroup.rotation.y = t.rotY || 0;
+    t.ops.forEach(function (e) { if (e.present) appliquer(e.id, e.op); });
   }
 
-  function afficherGalerie() {
-    elGrille.innerHTML = '';
-    galerie.forEach(function (v, i) {
-      var d = document.createElement('div');
-      d.className = 'carte';
-      var img = document.createElement('img');
-      img.src = v.img; img.alt = v.equipe || '';
-      var n = document.createElement('div');
-      n.className = 'nom'; n.textContent = v.equipe || 'Sans nom';
-      var h = document.createElement('div');
-      h.className = 'h'; h.textContent = heure(v.ts);
-      d.appendChild(img); d.appendChild(n); d.appendChild(h);
-      d.addEventListener('click', function () { agrandir(v); });
-      elGrille.appendChild(d);
+  // ============================ ETAT DES EQUIPES ============================
+  // equipes[sid] = { sid, nom, rotY, actif(ts), ops:[{id,op,present}], index{} }
+  var equipes = {};
+  var focusSid = null;
+  var focusManuel = false;
+
+  function equipe(sid, nom) {
+    if (!equipes[sid]) equipes[sid] = { sid: sid, nom: nom || '?', rotY: 0, actif: 0, ops: [], index: {} };
+    if (nom) equipes[sid].nom = nom;
+    return equipes[sid];
+  }
+  function estActive(t) { return t.actif && (Date.now() - t.actif < 15000); }
+
+  function opAjout(sid, id, op) {
+    var t = equipe(sid);
+    if (t.index[id] !== undefined) { t.ops[t.index[id]].present = true; t.ops[t.index[id]].op = op; }
+    else { t.index[id] = t.ops.length; t.ops.push({ id: id, op: op, present: true }); }
+    if (sid === focusSid) appliquer(id, op);
+  }
+  function opRetrait(sid, ids) {
+    var t = equipe(sid);
+    ids.forEach(function (id) { if (t.index[id] !== undefined) t.ops[t.index[id]].present = false; });
+    if (sid === focusSid) rebatir(sid);   // rebatir : simple et toujours correct
+  }
+  function opClear(sid) {
+    var t = equipe(sid); t.ops = []; t.index = {};
+    if (sid === focusSid) rebatir(sid);
+  }
+  function opSnap(snap) {
+    var t = equipe(snap.sid, snap.equipe);
+    t.rotY = snap.rotY || 0; t.actif = Date.now();
+    t.ops = []; t.index = {};
+    (snap.fills || []).forEach(function (f, k) {
+      var id = 'f' + k; t.index[id] = t.ops.length;
+      t.ops.push({ id: id, present: true, op: { k: 'f', p: f.p, mi: f.mi, c: f.c } });
     });
-    elVide.style.display = galerie.length ? 'none' : '';
-    elCompteur.textContent = galerie.length ? '(' + galerie.length + '/' + MAX + ')' : '';
+    (snap.decals || []).forEach(function (d) {
+      t.index[d.id] = t.ops.length; t.ops.push({ id: d.id, present: true, op: d.op });
+    });
+    if (!focusSid || (!focusManuel && !estActiveAutre(snap.sid))) choisir(snap.sid);
+    else if (snap.sid === focusSid) rebatir(snap.sid);
+    majTuiles();
+  }
+  function estActiveAutre(sauf) {
+    for (var s in equipes) if (s !== sauf && estActive(equipes[s])) return true;
+    return false;
   }
 
+  // ============================ FOCUS + AFFICHAGE ============================
+  var elLiveNom = document.getElementById('liveNom');
+  var elLiveDot = document.getElementById('liveDot');
+  var elPhotoPlein = document.getElementById('photoPlein');
+  var elRien = document.getElementById('rienLive');
+  var elCanvas = document.getElementById('vue3d');
+
+  function choisir(sid) {
+    focusSid = sid;
+    rebatir(sid);
+    majAffichageCentre();
+    majTuiles();
+  }
+
+  function majAffichageCentre() {
+    var t = focusSid ? equipes[focusSid] : null;
+    if (!t) {
+      elRien.style.display = 'flex'; elCanvas.style.display = 'none';
+      elPhotoPlein.style.display = 'none'; elLiveNom.textContent = "En attente d'un casque...";
+      elLiveDot.style.display = 'none';
+      return;
+    }
+    elRien.style.display = 'none';
+    elLiveNom.textContent = t.nom;
+    var live = estActive(t);
+    elLiveDot.style.display = live ? '' : 'none';
+    if (live) {
+      elCanvas.style.display = ''; elPhotoPlein.style.display = 'none'; redim();
+    } else {
+      // Equipe silencieuse : on montre sa derniere photo si on en a une
+      var ph = photos[normNom(t.nom)];
+      if (ph) { elPhotoPlein.src = ph.img; elPhotoPlein.style.display = ''; elCanvas.style.display = 'none'; }
+      else { elCanvas.style.display = ''; elPhotoPlein.style.display = 'none'; }
+    }
+  }
+
+  // ============================ PHOTOS (une par equipe) ============================
+  var grille = document.getElementById('grille');
+  var photos = {};   // normNom -> { nom, img, ts }
+
+  function normNom(n) { return (n || '').trim().toLowerCase(); }
+
+  function chargerPhotos() {
+    try {
+      var arr = JSON.parse(localStorage.getItem(CLE_PHOTOS)) || [];
+      arr.forEach(function (p) { photos[normNom(p.nom)] = p; });
+    } catch (e) {}
+  }
+  function sauverPhotos() {
+    var arr = Object.keys(photos).map(function (k) { return photos[k]; });
+    arr.sort(function (a, b) { return b.ts - a.ts; });
+    if (arr.length > MAX_PHOTOS) arr = arr.slice(0, MAX_PHOTOS);
+    // reconstruit l'objet limite
+    photos = {}; arr.forEach(function (p) { photos[normNom(p.nom)] = p; });
+    try { localStorage.setItem(CLE_PHOTOS, JSON.stringify(arr)); }
+    catch (e) {
+      while (arr.length > 1) { arr.pop(); try { localStorage.setItem(CLE_PHOTOS, JSON.stringify(arr)); break; } catch (e2) {} }
+    }
+  }
   function ajouterPhoto(p) {
     if (!p || !p.img) return;
-    galerie.unshift({ equipe: p.equipe || '', img: p.img, ts: p.ts || Date.now() });
-    if (galerie.length > MAX) galerie.length = MAX;
-    sauver(galerie);
-    afficherGalerie();
+    photos[normNom(p.equipe)] = { nom: p.equipe || 'Sans nom', img: p.img, ts: p.ts || Date.now() };
+    sauverPhotos();
+    majTuiles();
+    if (focusSid && equipes[focusSid] && normNom(equipes[focusSid].nom) === normNom(p.equipe)) majAffichageCentre();
   }
 
-  // ---- Agrandissement ----
+  // Reconstruit les tuiles autour de la vue centrale (equipes connues + photos)
+  function majTuiles() {
+    // enleve les anciennes tuiles (garde la vue centrale #direct)
+    var vieilles = grille.querySelectorAll('.tuile');
+    for (var i = 0; i < vieilles.length; i++) grille.removeChild(vieilles[i]);
+
+    // liste des equipes : celles en direct + celles ayant une photo
+    var noms = {};
+    for (var s in equipes) noms[normNom(equipes[s].nom)] = { nom: equipes[s].nom, sid: s };
+    for (var k in photos) if (!noms[k]) noms[k] = { nom: photos[k].nom, sid: null };
+
+    var liste = Object.keys(noms).map(function (k) { return noms[k]; });
+    // les plus recemment actives d'abord
+    liste.sort(function (a, b) {
+      var ta = a.sid && equipes[a.sid] ? equipes[a.sid].actif : 0;
+      var tb = b.sid && equipes[b.sid] ? equipes[b.sid].actif : 0;
+      return tb - ta;
+    });
+
+    liste.forEach(function (it) {
+      var d = document.createElement('div');
+      d.className = 'tuile';
+      var t = it.sid ? equipes[it.sid] : null;
+      var live = t && estActive(t);
+      if (it.sid && it.sid === focusSid) d.className += ' actif';
+      var ph = photos[normNom(it.nom)];
+      if (ph) {
+        var img = document.createElement('img'); img.src = ph.img; img.alt = it.nom; d.appendChild(img);
+      } else {
+        var pl = document.createElement('div'); pl.className = 'ph';
+        pl.textContent = (it.nom[0] || '?').toUpperCase(); d.appendChild(pl);
+      }
+      var lg = document.createElement('div'); lg.className = 'lg';
+      var dot = document.createElement('span'); dot.className = 'dot' + (live ? ' live' : '');
+      lg.appendChild(dot);
+      lg.appendChild(document.createTextNode(it.nom));
+      d.appendChild(lg);
+
+      d.addEventListener('click', function () {
+        // trouve un sid en direct pour cette equipe
+        var sid = it.sid;
+        if (!sid || !equipes[sid]) {
+          for (var s in equipes) if (normNom(equipes[s].nom) === normNom(it.nom)) { sid = s; break; }
+        }
+        if (sid && equipes[sid]) { focusManuel = true; document.getElementById('autoSuivi').checked = false; choisir(sid); }
+        else if (ph) { zoomer(ph); }   // pas en direct : on agrandit la photo
+      });
+      grille.appendChild(d);
+    });
+
+    var n = Object.keys(photos).length;
+    document.getElementById('compteur').textContent = n ? (n + '/' + MAX_PHOTOS + ' photo(s)') : '';
+  }
+
+  // ---------- agrandissement ----------
   var zoom = document.getElementById('zoom');
-  function agrandir(v) {
-    document.getElementById('zoomImg').src = v.img;
-    document.getElementById('zoomNom').textContent = v.equipe || 'Sans nom';
+  function zoomer(p) {
+    document.getElementById('zoomImg').src = p.img;
+    document.getElementById('zoomNom').textContent = p.nom || 'Sans nom';
     zoom.style.display = 'flex';
   }
-  document.getElementById('zoomFermer').addEventListener('click', function () {
-    zoom.style.display = 'none';
-  });
-  zoom.addEventListener('click', function (e) {
-    if (e.target === zoom) zoom.style.display = 'none';
+  document.getElementById('zoomFermer').addEventListener('click', function () { zoom.style.display = 'none'; });
+  zoom.addEventListener('click', function (e) { if (e.target === zoom) zoom.style.display = 'none'; });
+
+  document.getElementById('autoSuivi').addEventListener('change', function (e) {
+    focusManuel = !e.target.checked;
   });
 
-  // ---- Vider ----
   document.getElementById('btnVider').addEventListener('click', function () {
-    if (document.getElementById('code').value !== '1234') {
-      alert('Code incorrect.'); return;
-    }
-    if (!confirm('Effacer les ' + galerie.length + ' photo(s) de la galerie ?')) return;
-    galerie = [];
-    sauver(galerie);
-    afficherGalerie();
+    if (document.getElementById('code').value !== '1234') { alert('Code incorrect.'); return; }
+    if (!confirm('Effacer toutes les photos ?')) return;
+    photos = {}; try { localStorage.removeItem(CLE_PHOTOS); } catch (e) {}
     document.getElementById('code').value = '';
+    majTuiles(); majAffichageCentre();
   });
 
-  // ---- Vue en direct ----
-  var dernierLive = 0;
-  function majLive(p) {
-    dernierLive = Date.now();
-    elEquipe.textContent = p.equipe || '—';
-    elInfos.textContent = p.actions + ' action(s)  -  maj ' + heure(p.ts);
-    if (p.img) {
-      var img = elCadre.querySelector('img');
-      if (!img) { elCadre.innerHTML = ''; img = document.createElement('img'); elCadre.appendChild(img); }
-      img.src = p.img;
-    }
-  }
+  // ============================ CONNEXION ============================
+  var elPast = document.getElementById('pastille');
+  var elEtat = document.getElementById('etatTxt');
+  function etat(ok, txt) { elPast.className = 'pastille' + (ok ? ' on' : ''); elEtat.textContent = txt; }
 
-  // Si plus rien n'arrive pendant 20 s, on signale que le casque s'est tu
-  setInterval(function () {
-    if (dernierLive && Date.now() - dernierLive > 20000) {
-      elInfos.textContent = 'Aucun signal du casque depuis ' +
-        Math.round((Date.now() - dernierLive) / 1000) + ' s';
-    }
-  }, 5000);
-
-  // ---- Connexion ----
-  function etat(ok, txt) {
-    elPast.className = 'pastille' + (ok ? ' on' : '');
-    elEtat.textContent = txt;
-  }
-
+  var canal = null;
   try {
     if (typeof supabase === 'undefined') { etat(false, 'supabase.min.js absent'); }
     else {
       var client = supabase.createClient(SB_URL, SB_ANON);
-      var canal = client.channel(CANAL);
-      canal.on('broadcast', { event: 'live' },  function (m) { majLive(m.payload || {}); });
+      canal = client.channel(CANAL);
+      canal.on('broadcast', { event: 'pres' },  function (m) {
+        var p = m.payload || {}; var t = equipe(p.sid, p.equipe);
+        t.rotY = p.rotY || 0; t.actif = Date.now();
+        if (p.sid === focusSid) { if (liveGroup) liveGroup.rotation.y = t.rotY; }
+        if (!focusSid && !focusManuel) choisir(p.sid);
+        majTuiles();
+      });
+      canal.on('broadcast', { event: 'add' },  function (m) { var p = m.payload || {}; opAjout(p.sid, p.id, p.op); });
+      canal.on('broadcast', { event: 'del' },  function (m) { var p = m.payload || {}; opRetrait(p.sid, p.ids || []); });
+      canal.on('broadcast', { event: 'clr' },  function (m) { var p = m.payload || {}; equipe(p.sid, p.equipe); opClear(p.sid); });
+      canal.on('broadcast', { event: 'snap' }, function (m) { opSnap(m.payload || {}); });
       canal.on('broadcast', { event: 'photo' }, function (m) { ajouterPhoto(m.payload || {}); });
       canal.subscribe(function (s) {
-        etat(s === 'SUBSCRIBED', s === 'SUBSCRIBED' ? 'Connecte, en attente du casque' : String(s));
+        var ok = (s === 'SUBSCRIBED');
+        etat(ok, ok ? 'Connecte, en attente des casques' : String(s));
+        if (ok) demanderEtat();
       });
     }
   } catch (e) { etat(false, 'Erreur : ' + e.message); }
 
-  afficherGalerie();
+  // Demande aux casques deja en cours de nous envoyer leur etat complet
+  function demanderEtat() {
+    if (!canal) return;
+    try { canal.send({ type: 'broadcast', event: 'join', payload: { ts: Date.now() } }); } catch (e) {}
+  }
+  setInterval(function () {   // au cas ou un casque arrive apres nous sans etre vu
+    if (canal && Object.keys(equipes).length === 0) demanderEtat();
+  }, 6000);
+
+  // Rafraichit l'etat "en direct / silencieux" regulierement
+  setInterval(function () { majTuiles(); majAffichageCentre(); }, 4000);
+
+  // ============================ BOUCLE DE RENDU ============================
+  chargerPhotos();
+  majTuiles();
+  majAffichageCentre();
+
+  (function boucle() {
+    requestAnimationFrame(boucle);
+    if (liveGroup && focusSid && estActive(equipes[focusSid]) && elCanvas.style.display !== 'none') {
+      placerCamera();
+      renderer.render(scene, camera);
+    }
+  })();
+
 })();
 </script>
 </body>

@@ -13,34 +13,39 @@
     }
     .logos-bar {
       display: flex; align-items: center; justify-content: center; gap: 26px;
-      background: #fff; border-radius: 16px; padding: 16px 26px; margin-bottom: 26px;
+      background: #fff; border-radius: 16px; padding: 16px 26px; margin-bottom: 22px;
       box-shadow: 0 6px 20px rgba(0,0,0,0.4);
     }
-    .logos-bar img { height: 70px; width: auto; display: block; }
-    .logos-bar .sep { width: 2px; height: 56px; background: #ddd; }
+    .logos-bar img { height: 66px; width: auto; display: block; }
+    .logos-bar .sep { width: 2px; height: 52px; background: #ddd; }
 
-    h1 { font-size: 26px; margin: 0 0 6px; text-align: center; }
-    .sous-titre { font-size: 14px; color: #999; margin: 0 0 28px; text-align: center; }
+    h1 { font-size: 25px; margin: 0 0 4px; text-align: center; }
+    .sous-titre { font-size: 14px; color: #999; margin: 0 0 26px; text-align: center; }
 
-    .cartes { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+    .groupe { width: 100%; max-width: 640px; margin-bottom: 20px; }
+    .groupe .titre {
+      font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+      color: #888; margin: 0 0 10px; padding-left: 4px;
+    }
+    .cartes { display: flex; gap: 16px; flex-wrap: wrap; }
 
     a.carte {
-      display: block; width: 270px; padding: 26px 22px; border-radius: 18px;
-      text-decoration: none; color: #fff; border: 2px solid #2a2a35;
-      background: #16161f; transition: transform .15s, border-color .15s;
+      flex: 1 1 240px; display: flex; align-items: center; gap: 14px;
+      padding: 20px; border-radius: 16px; text-decoration: none; color: #fff;
+      border: 2px solid #2a2a35; background: #16161f;
+      transition: transform .15s, border-color .15s;
     }
-    a.carte:hover, a.carte:focus { transform: translateY(-4px); border-color: #4aa3df; outline: none; }
-    a.carte .icone { font-size: 42px; line-height: 1; margin-bottom: 12px; }
-    a.carte h2 { font-size: 21px; margin: 0 0 8px; }
-    a.carte p  { font-size: 13px; color: #9a9aa8; margin: 0; line-height: 1.55; }
+    a.carte:hover, a.carte:focus { transform: translateY(-3px); border-color: #4aa3df; outline: none; }
+    a.carte .icone { font-size: 34px; line-height: 1; }
+    a.carte h2 { font-size: 18px; margin: 0 0 3px; }
+    a.carte p  { font-size: 12px; color: #9a9aa8; margin: 0; line-height: 1.45; }
     a.assemblage h2 { color: #e0245e; }
     a.peinture   h2 { color: #27ae60; }
+    a.spect      h2 { color: #4aa3df; }
 
-    .note {
-      margin-top: 30px; font-size: 12px; color: #777; text-align: center;
-      max-width: 460px; line-height: 1.7;
-    }
-    .note a { color: #4aa3df; }
+    .note { margin-top: 6px; font-size: 12px; color: #777; text-align: center; max-width: 480px; line-height: 1.7; }
+    .note b { color: #bbb; }
+    #version { margin-top: 16px; font-size: 11px; color: #555; }
   </style>
 </head>
 <body>
@@ -52,34 +57,44 @@
   </div>
 
   <h1>CEC Bordeaux - Realite augmentee</h1>
-  <p class="sous-titre">Choisis une activite</p>
+  <p class="sous-titre">Choisis ton activite</p>
 
-  <div class="cartes">
+  <!-- AUTEUR : dans le casque Meta Quest 3 -->
+  <div class="groupe">
+    <div class="titre">Auteur &mdash; dans le casque (Wolvic)</div>
+    <div class="cartes">
+      <a class="carte assemblage" href="assemblage.html">
+        <div class="icone">&#128295;</div>
+        <div><h2>Assemblage auteur</h2><p>Remonte la voiture piece par piece, contre le chrono.</p></div>
+      </a>
+      <a class="carte peinture" href="peinture.html">
+        <div class="icone">&#127912;</div>
+        <div><h2>Decoration auteur</h2><p>Peins la carrosserie et colle tes logos.</p></div>
+      </a>
+    </div>
+  </div>
 
-    <a class="carte assemblage" href="assemblage.html">
-      <div class="icone">&#128295;</div>
-      <h2>Assemblage</h2>
-      <p>Remonte la voiture piece par piece sur ta table, le plus vite possible.
-         Chrono et classement des joueurs.</p>
-    </a>
-
-    <a class="carte peinture" href="peinture.html">
-      <div class="icone">&#127912;</div>
-      <h2>Peinture &amp; deco</h2>
-      <p>Peins la carrosserie aux couleurs de ton equipe et colle tes logos
-         sur la voiture.</p>
-    </a>
-
+  <!-- SPECTATEUR : sur un PC -->
+  <div class="groupe">
+    <div class="titre">Spectateur &mdash; sur un PC</div>
+    <div class="cartes">
+      <a class="carte spect" href="spectateur.html">
+        <div class="icone">&#128250;</div>
+        <div><h2>Assemblage spectateur</h2><p>Suis les joueurs et le classement en direct.</p></div>
+      </a>
+      <a class="carte spect" href="spectateur-deco.html">
+        <div class="icone">&#128444;&#65039;</div>
+        <div><h2>Decoration spectateur</h2><p>Vue 3D en direct au centre, photos des equipes autour.</p></div>
+      </a>
+    </div>
   </div>
 
   <p class="note">
-    A ouvrir dans <b>Wolvic</b> sur le Meta Quest 3.<br/>
-    Ecrans spectateur (sur PC) :
-    <a href="spectateur.html">Assemblage</a> &nbsp;&middot;&nbsp;
-    <a href="spectateur-deco.html">Peinture &amp; deco</a>
+    Les activites <b>auteur</b> s'ouvrent dans <b>Wolvic</b> sur le Meta Quest 3.<br/>
+    Les ecrans <b>spectateur</b> s'ouvrent sur un ordinateur.
   </p>
 
-  <div style="margin-top:18px;font-size:11px;color:#555">v7.1.0</div>
+  <div id="version">v7.2.0</div>
 
 </body>
 </html>

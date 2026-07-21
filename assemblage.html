@@ -43,14 +43,18 @@
     .rang-br td  { color: #cd7f32; }
     .rang-moi td { background: #1a2a1a; }
     #resultat   { font-size: 19px; color: #27ae60; margin: 8px 0; }
-    .retour { display: inline-block; margin-top: 16px; font-size: 13px;
-              color: #4aa3df; text-decoration: none; }
+    /* Bouton de retour au menu, identique sur l'assemblage et la decoration */
+    .menu-btn { position: fixed; top: 10px; left: 10px; z-index: 12;
+      background: rgba(20,20,25,0.9); border: 1px solid #3a3a45; color: #fff;
+      padding: 8px 14px; border-radius: 10px; font-size: 13px; text-decoration: none; }
+    .menu-btn:hover { border-color: #4aa3df; }
     #version { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center;
                font-size: 11px; color: #666; z-index: 11; }
     canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
   </style>
 </head>
 <body>
+  <a href="index.html" class="menu-btn">&#8592; Menu principal</a>
   <div id="overlay">
 
     <!-- Ecran 1 : saisie du nom -->
@@ -66,7 +70,6 @@
       <button class="btn btn-start" id="btnCommencer">Entrer en AR</button>
       <div id="status">Chargement...</div>
       <div id="errbox"></div>
-      <a class="retour" href="index.html">&#8592; Retour au menu</a>
     </div>
 
     <!-- Ecran 2 : classement -->
@@ -79,7 +82,7 @@
            (spectateur.html), pas depuis le casque. -->
     </div>
 
-    <div id="version">v7.0.0</div>
+    <div id="version">v7.2.0</div>
 
   </div>
   <canvas id="c"></canvas>
@@ -100,6 +103,6 @@
   <!-- Diffusion en direct vers le tableau de bord spectateur (local : CDN bloque sur le reseau Quest) -->
   <script src="supabase.min.js"></script>
   <!-- ?v= : anti-cache, a incrementer a chaque version pour forcer Wolvic a recharger -->
-  <script src="app.js?v=7.0.0"></script>
+  <script src="app.js?v=7.2.0"></script>
 </body>
 </html>
