@@ -258,16 +258,22 @@ var loader = new THREE.GLTFLoader();
 function chargerVoiture() {
   loader.load('Voiture_CEC_Bordeaux.glb', function (gltf) {
     var root = gltf.scene;
-    ajusterTaille(root, 0.30);
-    carGroup.add(root);
 
-    // Recentrer la voiture sur l'ancre et la poser sur la table
+    // ATTENTION : tout le recentrage se fait TANT QUE root n'a PAS de parent.
+    // Box3.setFromObject renvoie des coordonnees MONDE : si root etait deja
+    // rattache a l'ancre (posee a 1 ou 2 m dans la piece), on soustrairait un
+    // decalage monde a une position locale et la voiture partirait hors de vue.
+    // Sans parent, matrixWorld = matrice locale, donc les deux reperes
+    // coincident et le calcul est juste.
+    ajusterTaille(root, 0.30);
     root.updateMatrixWorld(true);
     var box = new THREE.Box3().setFromObject(root);
     var centre = new THREE.Vector3();
     box.getCenter(centre);
-    root.position.sub(centre);            // centre horizontalement
+    root.position.sub(centre);                         // centre horizontalement
     root.position.y += (centre.y - box.min.y) + 0.01;  // pose le bas sur la table
+
+    carGroup.add(root);   // rattachement seulement maintenant
 
     // IMPORTANT : le materiau n0 est partage entre la carrosserie et le bloc
     // propulseur. Sans clonage, colorier la carrosserie colorierait aussi le
