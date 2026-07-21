@@ -3,100 +3,81 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Assemblage CEC Bordeaux</title>
+  <title>CEC Bordeaux - Realite augmentee</title>
   <style>
-    body { margin: 0; background: #000; }
-    #overlay {
-      position: fixed; inset: 0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; text-align: center;
-      background: rgba(0,0,0,0.92); color: white; font-family: sans-serif;
-      z-index: 10; padding: 20px; box-sizing: border-box; overflow-y: auto;
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: #0d0d12; color: #fff;
+      font-family: sans-serif; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 24px;
     }
-    #screen-nom, #screen-classement { text-align: center; }
-    /* Bandeau blanc avec les logos partenaires */
     .logos-bar {
       display: flex; align-items: center; justify-content: center; gap: 26px;
-      background: #fff; border-radius: 16px; padding: 16px 26px; margin: 0 0 22px;
+      background: #fff; border-radius: 16px; padding: 16px 26px; margin-bottom: 26px;
       box-shadow: 0 6px 20px rgba(0,0,0,0.4);
     }
     .logos-bar img { height: 70px; width: auto; display: block; }
     .logos-bar .sep { width: 2px; height: 56px; background: #ddd; }
-    h1 { font-size: 22px; margin: 0 0 8px; }
-    p  { font-size: 13px; color: #aaa; margin: 0 0 16px; }
-    input[type="text"], input[type="password"] {
-      font-size: 20px; padding: 12px 16px; border-radius: 10px;
-      border: 2px solid #444; background: #1a1a1a; color: white;
-      width: 260px; text-align: center; margin: 0 auto 14px; display: block;
+
+    h1 { font-size: 26px; margin: 0 0 6px; text-align: center; }
+    .sous-titre { font-size: 14px; color: #999; margin: 0 0 28px; text-align: center; }
+
+    .cartes { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+
+    a.carte {
+      display: block; width: 270px; padding: 26px 22px; border-radius: 18px;
+      text-decoration: none; color: #fff; border: 2px solid #2a2a35;
+      background: #16161f; transition: transform .15s, border-color .15s;
     }
-    input:focus { border-color: #e0245e; outline: none; }
-    .btn { padding: 14px 30px; font-size: 17px; border: none; border-radius: 12px; color: white; cursor: pointer; margin: 5px; }
-    .btn-start  { background: #e0245e; }
-    .btn-new    { background: #27ae60; }
-    #status  { margin-top: 12px; font-size: 13px; color: #aaa; }
-    #errbox  { font-size: 11px; color: #ff6b6b; white-space: pre-wrap; max-width: 90vw; margin-top: 6px; }
-    #tableau { width: 100%; max-width: 380px; margin: 12px 0; }
-    #tableau table { width: 100%; border-collapse: collapse; font-size: 15px; }
-    #tableau th { background: #222; padding: 8px 12px; text-align: left; border-bottom: 1px solid #444; }
-    #tableau td { padding: 8px 12px; border-bottom: 1px solid #222; }
-    .rang-or td  { color: #ffd700; font-weight: bold; }
-    .rang-ag td  { color: #c0c0c0; }
-    .rang-br td  { color: #cd7f32; }
-    .rang-moi td { background: #1a2a1a; }
-    #resultat   { font-size: 19px; color: #27ae60; margin: 8px 0; }
-    #version { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center;
-               font-size: 11px; color: #666; z-index: 11; }
-    canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+    a.carte:hover, a.carte:focus { transform: translateY(-4px); border-color: #4aa3df; outline: none; }
+    a.carte .icone { font-size: 42px; line-height: 1; margin-bottom: 12px; }
+    a.carte h2 { font-size: 21px; margin: 0 0 8px; }
+    a.carte p  { font-size: 13px; color: #9a9aa8; margin: 0; line-height: 1.55; }
+    a.assemblage h2 { color: #e0245e; }
+    a.peinture   h2 { color: #27ae60; }
+
+    .note {
+      margin-top: 30px; font-size: 12px; color: #777; text-align: center;
+      max-width: 460px; line-height: 1.7;
+    }
+    .note a { color: #4aa3df; }
   </style>
 </head>
 <body>
-  <div id="overlay">
 
-    <!-- Ecran 1 : saisie du nom -->
-    <div id="screen-nom">
-      <div class="logos-bar">
-        <img src="logo-gmp.png" alt="IUT GMP Bordeaux" onerror="this.style.display='none'"/>
-        <span class="sep"></span>
-        <img src="logo-cec.png" alt="Course en Cours" onerror="this.style.display='none'"/>
-      </div>
-      <h1>Assemblage CEC Bordeaux</h1>
-      <p>Entrez votre nom pour commencer :</p>
-      <input id="inputNom" type="text" maxlength="20" placeholder="Votre nom..."/>
-      <button class="btn btn-start" id="btnCommencer">Entrer en AR</button>
-      <div id="status">Chargement...</div>
-      <div id="errbox"></div>
-    </div>
+  <div class="logos-bar">
+    <img src="logo-gmp.png" alt="IUT GMP Bordeaux" onerror="this.style.display='none'"/>
+    <span class="sep"></span>
+    <img src="logo-cec.png" alt="Course en Cours" onerror="this.style.display='none'"/>
+  </div>
 
-    <!-- Ecran 2 : classement -->
-    <div id="screen-classement" style="display:none">
-      <h1>Classement CEC</h1>
-      <div id="resultat"></div>
-      <div id="tableau"></div>
-      <button class="btn btn-new" id="btnNouvelle">Nouvelle session</button>
-      <!-- L'effacement du classement se fait depuis la page spectateur
-           (spectateur.html), pas depuis le casque. -->
-    </div>
+  <h1>CEC Bordeaux - Realite augmentee</h1>
+  <p class="sous-titre">Choisis une activite</p>
 
-    <div id="version">v6.7.2</div>
+  <div class="cartes">
+
+    <a class="carte assemblage" href="assemblage.html">
+      <div class="icone">&#128295;</div>
+      <h2>Assemblage</h2>
+      <p>Remonte la voiture piece par piece sur ta table, le plus vite possible.
+         Chrono et classement des joueurs.</p>
+    </a>
+
+    <a class="carte peinture" href="peinture.html">
+      <div class="icone">&#127912;</div>
+      <h2>Peinture &amp; deco</h2>
+      <p>Peins la carrosserie aux couleurs de ton equipe et colle tes logos
+         sur la voiture.</p>
+    </a>
 
   </div>
-  <canvas id="c"></canvas>
 
-  <script>
-    window.addEventListener('error', function (e) {
-      var el = document.getElementById('errbox');
-      if (el) el.textContent = 'ERR: ' + e.message + ' (' + e.filename + ':' + e.lineno + ')';
-    });
-    window.addEventListener('unhandledrejection', function (e) {
-      var el = document.getElementById('errbox');
-      if (el) el.textContent = 'ERR: ' + e.reason;
-    });
-  </script>
+  <p class="note">
+    A ouvrir dans <b>Wolvic</b> sur le Meta Quest 3.<br/>
+    Tableau de bord spectateur (sur PC) : <a href="spectateur.html">spectateur.html</a>
+  </p>
 
-  <script src="three.min.js"></script>
-  <script src="GLTFLoader.js"></script>
-  <!-- Diffusion en direct vers le tableau de bord spectateur (local : CDN bloque sur le reseau Quest) -->
-  <script src="supabase.min.js"></script>
-  <!-- ?v= : anti-cache, a incrementer a chaque version pour forcer Wolvic a recharger -->
-  <script src="app.js?v=6.7.2"></script>
+  <div style="margin-top:18px;font-size:11px;color:#555">v7.0.0</div>
+
 </body>
 </html>
