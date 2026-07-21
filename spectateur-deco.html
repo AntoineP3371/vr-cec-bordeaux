@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Spectateur - Deco CEC Bordeaux</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #0d0d12; color: #fff;
+    font-family: sans-serif; padding: 16px;
+  }
+  header { display: flex; align-items: center; gap: 18px; margin-bottom: 16px; flex-wrap: wrap; }
+  header .logos { display: flex; align-items: center; gap: 16px;
+                  background: #fff; border-radius: 12px; padding: 8px 16px; }
+  header .logos img { height: 44px; display: block; }
+  h1 { font-size: 21px; margin: 0; }
+  .etat { margin-left: auto; font-size: 13px; color: #999; display: flex;
+          align-items: center; gap: 8px; }
+  .pastille { width: 10px; height: 10px; border-radius: 50%; background: #666; }
+  .pastille.on { background: #27ae60; }
+
+  .colonnes { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+
+  /* ---- Vue en direct ---- */
+  .direct { flex: 0 0 420px; background: #16161f; border: 2px solid #2a2a35;
+            border-radius: 16px; padding: 14px; }
+  .direct h2 { font-size: 15px; margin: 0 0 10px; color: #4aa3df;
+               text-transform: uppercase; letter-spacing: .5px; }
+  .direct .cadre { width: 100%; aspect-ratio: 4/3; background: #0a0a10;
+                   border-radius: 10px; overflow: hidden; display: flex;
+                   align-items: center; justify-content: center; }
+  .direct .cadre img { width: 100%; height: 100%; object-fit: contain; }
+  .direct .vide { color: #555; font-size: 13px; text-align: center; padding: 20px; }
+  .direct .equipe { font-size: 20px; font-weight: bold; margin-top: 10px; }
+  .direct .infos { font-size: 13px; color: #999; margin-top: 2px; }
+
+  /* ---- Galerie ---- */
+  .galerie { flex: 1 1 520px; min-width: 320px; }
+  .galerie h2 { font-size: 15px; margin: 0 0 10px; color: #27ae60;
+                text-transform: uppercase; letter-spacing: .5px; }
+  .grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px; }
+  .carte { background: #16161f; border: 1px solid #2a2a35; border-radius: 12px;
+           overflow: hidden; cursor: pointer; transition: border-color .15s, transform .15s; }
+  .carte:hover { border-color: #27ae60; transform: translateY(-3px); }
+  .carte img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; }
+  .carte .nom { padding: 7px 9px; font-size: 13px; font-weight: bold;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .carte .h   { padding: 0 9px 8px; font-size: 11px; color: #777; }
+  .galerie .vide { color: #555; font-size: 13px; padding: 30px 0; }
+
+  .barre { margin-top: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button { padding: 9px 16px; font-size: 13px; border: none; border-radius: 9px;
+           background: #333; color: #fff; cursor: pointer; }
+  button.danger { background: #8e2b2b; }
+  input[type=password] { padding: 9px 12px; border-radius: 9px; border: 1px solid #444;
+           background: #1a1a1a; color: #fff; width: 110px; text-align: center; }
+  .compteur { font-size: 12px; color: #777; }
+
+  /* ---- Agrandissement ---- */
+  #zoom { position: fixed; inset: 0; background: rgba(0,0,0,.9); display: none;
+          align-items: center; justify-content: center; flex-direction: column;
+          gap: 14px; z-index: 50; padding: 20px; }
+  #zoom img { max-width: 92vw; max-height: 78vh; border-radius: 12px; }
+  #zoom .nom { font-size: 24px; font-weight: bold; }
+
+  footer { margin-top: 20px; font-size: 11px; color: #555; text-align: center; }
+  footer a { color: #4aa3df; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logos">
+    <img src="logo-gmp.png" alt="IUT GMP" onerror="this.style.display='none'"/>
+    <img src="logo-cec.png" alt="Course en Cours" onerror="this.style.display='none'"/>
+  </div>
+  <h1>Deco CEC Bordeaux &mdash; ecran spectateur</h1>
+  <div class="etat"><span class="pastille" id="pastille"></span><span id="etatTxt">Connexion...</span></div>
+</header>
+
+<div class="colonnes">
+
+  <section class="direct">
+    <h2>En direct depuis le casque</h2>
+    <div class="cadre" id="cadreLive">
+      <div class="vide">En attente d'un joueur...</div>
+    </div>
+    <div class="equipe" id="liveEquipe">&mdash;</div>
+    <div class="infos" id="liveInfos"></div>
+  </section>
+
+  <section class="galerie">
+    <h2>Voitures terminees <span class="compteur" id="compteur"></span></h2>
+    <div class="grille" id="grille"></div>
+    <div class="vide" id="galerieVide">Aucune photo pour l'instant. Dans le casque, appuie sur PHOTO.</div>
+    <div class="barre">
+      <input type="password" id="code" placeholder="code" maxlength="4"/>
+      <button class="danger" id="btnVider">Vider la galerie</button>
+      <span class="compteur">La galerie garde les 20 dernieres voitures, meme apres rechargement.</span>
+    </div>
+  </section>
+
+</div>
+
+<div id="zoom">
+  <img id="zoomImg" alt=""/>
+  <div class="nom" id="zoomNom"></div>
+  <button id="zoomFermer">Fermer</button>
+</div>
+
+<footer>
+  <a href="index.html">&#8592; Retour au menu</a> &nbsp;|&nbsp;
+  <a href="spectateur.html">Tableau de bord Assemblage</a>
+  &nbsp;|&nbsp; v7.1.0
+</footer>
+
+<script src="supabase.min.js"></script>
+<script>
+(function () {
+  var SB_URL  = 'https://ggmlfbxppgeivfvlxxrj.supabase.co';
+  var SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdnbWxmYnhwcGdlaXZmdmx4eHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNDY5NTIsImV4cCI6MjA5NzkyMjk1Mn0.HvPE2ewB8gFgVzj-xAb1YBxFfn8hTEwOwQLDfF1vgT0';
+  var CANAL   = 'vr-cec-deco';
+  var CLE     = 'cec_deco_galerie';
+  var MAX     = 20;
+
+  var elPast = document.getElementById('pastille');
+  var elEtat = document.getElementById('etatTxt');
+  var elCadre = document.getElementById('cadreLive');
+  var elEquipe = document.getElementById('liveEquipe');
+  var elInfos = document.getElementById('liveInfos');
+  var elGrille = document.getElementById('grille');
+  var elVide = document.getElementById('galerieVide');
+  var elCompteur = document.getElementById('compteur');
+
+  // ---- Galerie (conservee dans le navigateur du PC) ----
+  function charger() {
+    try { return JSON.parse(localStorage.getItem(CLE)) || []; } catch (e) { return []; }
+  }
+  function sauver(g) {
+    try { localStorage.setItem(CLE, JSON.stringify(g)); }
+    catch (e) {
+      // Quota depasse : on retire les plus anciennes jusqu'a ce que ca rentre
+      while (g.length > 1) {
+        g.pop();
+        try { localStorage.setItem(CLE, JSON.stringify(g)); return; } catch (e2) {}
+      }
+    }
+  }
+
+  var galerie = charger();
+
+  function heure(ts) {
+    var d = new Date(ts || Date.now());
+    return ('0'+d.getHours()).slice(-2) + ':' + ('0'+d.getMinutes()).slice(-2);
+  }
+
+  function afficherGalerie() {
+    elGrille.innerHTML = '';
+    galerie.forEach(function (v, i) {
+      var d = document.createElement('div');
+      d.className = 'carte';
+      var img = document.createElement('img');
+      img.src = v.img; img.alt = v.equipe || '';
+      var n = document.createElement('div');
+      n.className = 'nom'; n.textContent = v.equipe || 'Sans nom';
+      var h = document.createElement('div');
+      h.className = 'h'; h.textContent = heure(v.ts);
+      d.appendChild(img); d.appendChild(n); d.appendChild(h);
+      d.addEventListener('click', function () { agrandir(v); });
+      elGrille.appendChild(d);
+    });
+    elVide.style.display = galerie.length ? 'none' : '';
+    elCompteur.textContent = galerie.length ? '(' + galerie.length + '/' + MAX + ')' : '';
+  }
+
+  function ajouterPhoto(p) {
+    if (!p || !p.img) return;
+    galerie.unshift({ equipe: p.equipe || '', img: p.img, ts: p.ts || Date.now() });
+    if (galerie.length > MAX) galerie.length = MAX;
+    sauver(galerie);
+    afficherGalerie();
+  }
+
+  // ---- Agrandissement ----
+  var zoom = document.getElementById('zoom');
+  function agrandir(v) {
+    document.getElementById('zoomImg').src = v.img;
+    document.getElementById('zoomNom').textContent = v.equipe || 'Sans nom';
+    zoom.style.display = 'flex';
+  }
+  document.getElementById('zoomFermer').addEventListener('click', function () {
+    zoom.style.display = 'none';
+  });
+  zoom.addEventListener('click', function (e) {
+    if (e.target === zoom) zoom.style.display = 'none';
+  });
+
+  // ---- Vider ----
+  document.getElementById('btnVider').addEventListener('click', function () {
+    if (document.getElementById('code').value !== '1234') {
+      alert('Code incorrect.'); return;
+    }
+    if (!confirm('Effacer les ' + galerie.length + ' photo(s) de la galerie ?')) return;
+    galerie = [];
+    sauver(galerie);
+    afficherGalerie();
+    document.getElementById('code').value = '';
+  });
+
+  // ---- Vue en direct ----
+  var dernierLive = 0;
+  function majLive(p) {
+    dernierLive = Date.now();
+    elEquipe.textContent = p.equipe || '—';
+    elInfos.textContent = p.actions + ' action(s)  -  maj ' + heure(p.ts);
+    if (p.img) {
+      var img = elCadre.querySelector('img');
+      if (!img) { elCadre.innerHTML = ''; img = document.createElement('img'); elCadre.appendChild(img); }
+      img.src = p.img;
+    }
+  }
+
+  // Si plus rien n'arrive pendant 20 s, on signale que le casque s'est tu
+  setInterval(function () {
+    if (dernierLive && Date.now() - dernierLive > 20000) {
+      elInfos.textContent = 'Aucun signal du casque depuis ' +
+        Math.round((Date.now() - dernierLive) / 1000) + ' s';
+    }
+  }, 5000);
+
+  // ---- Connexion ----
+  function etat(ok, txt) {
+    elPast.className = 'pastille' + (ok ? ' on' : '');
+    elEtat.textContent = txt;
+  }
+
+  try {
+    if (typeof supabase === 'undefined') { etat(false, 'supabase.min.js absent'); }
+    else {
+      var client = supabase.createClient(SB_URL, SB_ANON);
+      var canal = client.channel(CANAL);
+      canal.on('broadcast', { event: 'live' },  function (m) { majLive(m.payload || {}); });
+      canal.on('broadcast', { event: 'photo' }, function (m) { ajouterPhoto(m.payload || {}); });
+      canal.subscribe(function (s) {
+        etat(s === 'SUBSCRIBED', s === 'SUBSCRIBED' ? 'Connecte, en attente du casque' : String(s));
+      });
+    }
+  } catch (e) { etat(false, 'Erreur : ' + e.message); }
+
+  afficherGalerie();
+})();
+</script>
+</body>
+</html>

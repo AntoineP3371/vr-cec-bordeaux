@@ -89,11 +89,138 @@ var TAILLE_LOGO  = [0.025, 0.050, 0.090];
 function couleurCourante() { return PALETTE[couleurIdx]; }
 
 // ============================================================================
+//  DIFFUSION VERS L'ECRAN SPECTATEUR
+//  Mode "broadcast" de Supabase Realtime : rien n'est ecrit en base de donnees.
+//  Canal DISTINCT de celui du jeu d'assemblage (vr-cec-live) pour ne pas
+//  melanger les deux activites. Tout est enrobe de try/catch : si la diffusion
+//  echoue, l'appli de peinture continue de fonctionner normalement.
+// ============================================================================
+var SB_URL  = 'https://ggmlfbxppgeivfvlxxrj.supabase.co';
+var SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdnbWxmYnhwcGdlaXZmdmx4eHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNDY5NTIsImV4cCI6MjA5NzkyMjk1Mn0.HvPE2ewB8gFgVzj-xAb1YBxFfn8hTEwOwQLDfF1vgT0';
+var CANAL_DECO = 'vr-cec-deco';
+
+var canalLive = null;
+var canalPret = false;
+var SID = Math.random().toString(36).slice(2, 10);
+var messagePhoto = '';        // texte temporaire affiche sur le bouton PHOTO
+
+function initDiffusion() {
+  try {
+    if (typeof supabase === 'undefined') return;
+    var client = supabase.createClient(SB_URL, SB_ANON);
+    canalLive = client.channel(CANAL_DECO);
+    canalLive.subscribe(function (statut) {
+      canalPret = (statut === 'SUBSCRIBED');
+      majPanneau();
+    });
+  } catch (e) { canalLive = null; canalPret = false; }
+}
+
+function envoyer(evenement, donnees) {
+  try {
+    if (!canalLive || !canalPret) return false;
+    canalLive.send({ type: 'broadcast', event: evenement, payload: donnees });
+    return true;
+  } catch (e) { return false; }
+}
+
+// ---- Capture de la voiture telle que l'utilisateur la voit --------------
+// En session AR, le rendu part vers l'affichage du casque : on ne peut pas
+// relire le canvas. On refait donc une passe de rendu dans une cible hors
+// ecran, avec une camera placee exactement a la pose de la tete.
+var teteMatrice = new THREE.Matrix4();
+var teteConnue  = false;
+var camPhoto    = new THREE.PerspectiveCamera(60, 4 / 3, 0.01, 20);
+
+function capturer(largeur, hauteur, qualite) {
+  if (!teteConnue || !carPret) return null;
+  try {
+    // On masque les elements d'interface : seule la voiture doit etre sur la photo
+    var etats = [panneau.visible, curseur.visible, preview.visible];
+    panneau.visible = curseur.visible = preview.visible = false;
+    var apercuVisible = apercu ? apercu.visible : false;
+    if (apercu) apercu.visible = false;
+    controllers.forEach(function (c) { if (c.userData.ligne) c.userData.ligne.visible = false; });
+
+    camPhoto.aspect = largeur / hauteur;
+    camPhoto.updateProjectionMatrix();
+    camPhoto.matrix.copy(teteMatrice);
+    camPhoto.matrix.decompose(camPhoto.position, camPhoto.quaternion, camPhoto.scale);
+    camPhoto.updateMatrixWorld(true);
+
+    var rt = new THREE.WebGLRenderTarget(largeur, hauteur);
+    var xrEtait = renderer.xr.enabled;
+    var fondEtait = renderer.getClearColor(new THREE.Color());
+    var alphaEtait = renderer.getClearAlpha();
+
+    // xr.enabled = false : sinon le moteur remplace notre camera par celle du casque
+    renderer.xr.enabled = false;
+    renderer.setRenderTarget(rt);
+    renderer.setClearColor(0x162032, 1);   // fond neutre (le passthrough n'est pas capturable)
+    renderer.clear();
+    renderer.render(scene, camPhoto);
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(fondEtait, alphaEtait);
+    renderer.xr.enabled = xrEtait;
+
+    var buf = new Uint8Array(largeur * hauteur * 4);
+    renderer.readRenderTargetPixels(rt, 0, 0, largeur, hauteur, buf);
+    rt.dispose();
+
+    // Retablit l'interface
+    panneau.visible = etats[0]; curseur.visible = etats[1]; preview.visible = etats[2];
+    if (apercu) apercu.visible = apercuVisible;
+    controllers.forEach(function (c) { if (c.userData.ligne) c.userData.ligne.visible = true; });
+
+    // WebGL rend l'image a l'envers : on la retourne en la recopiant
+    var cv = document.createElement('canvas');
+    cv.width = largeur; cv.height = hauteur;
+    var c2 = cv.getContext('2d');
+    var img = c2.createImageData(largeur, hauteur);
+    for (var y = 0; y < hauteur; y++) {
+      var src = (hauteur - 1 - y) * largeur * 4;
+      img.data.set(buf.subarray(src, src + largeur * 4), y * largeur * 4);
+    }
+    c2.putImageData(img, 0, 0);
+    return cv.toDataURL('image/jpeg', qualite);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Vue en direct : petite image envoyee regulierement
+var dernierLive = 0;
+function diffuserLive(force) {
+  var t = performance.now();
+  if (!force && t - dernierLive < 2500) return;
+  dernierLive = t;
+  if (!canalPret) return;
+  var img = capturer(192, 144, 0.45);
+  envoyer('live', {
+    sid: SID, equipe: equipe, actions: actions.length,
+    img: img || null, ts: Date.now()
+  });
+}
+
+// Photo definitive, ajoutee a la galerie du spectateur
+function prendrePhoto() {
+  var img = capturer(512, 384, 0.6);
+  if (!img) { messagePhoto = 'PHOTO IMPOSSIBLE'; }
+  else if (envoyer('photo', { sid: SID, equipe: equipe, img: img, ts: Date.now() })) {
+    messagePhoto = 'PHOTO ENVOYEE !';
+  } else {
+    messagePhoto = 'SPECTATEUR HORS LIGNE';
+  }
+  majPanneau();
+  setTimeout(function () { messagePhoto = ''; majPanneau(); }, 2200);
+}
+
+// ============================================================================
 //  PANNEAU DE COMMANDE (canvas 2D -> texture)
 //  Les zones sont declarees UNE SEULE FOIS et servent a la fois au dessin
 //  et a la detection du clic : impossible qu'ils se desynchronisent.
 // ============================================================================
-var PW = 512, PH = 560;
+var PW = 512, PH = 584;
 var PLANE_W = 0.55, PLANE_H = PLANE_W * PH / PW;
 
 var Z = {
@@ -115,8 +242,10 @@ var Z = {
   refaire: { x: 176, y: 378, w: 160, h: 52 },
   effacer: { x: 344, y: 378, w: 160, h: 52 },
 
-  replacer:{ x: 8,   y: 440, w: 246, h: 52 },
-  quitter: { x: 262, y: 440, w: 242, h: 52 }
+  photo:   { x: 8,   y: 440, w: 496, h: 52 },
+
+  replacer:{ x: 8,   y: 500, w: 246, h: 52 },
+  quitter: { x: 262, y: 500, w: 242, h: 52 }
 };
 
 function zoneCouleur(i) {
@@ -205,6 +334,11 @@ function dessinerPanneau() {
          refaire.length ? '#fff' : '#666');
   bouton(Z.effacer, '#8e2b2b', 'TOUT EFFACER', false);
 
+  // Bouton PHOTO : envoie la voiture telle que tu la vois vers l'ecran spectateur
+  ctx.font = 'bold 19px sans-serif';
+  bouton(Z.photo, messagePhoto ? '#1e7a3a' : '#27ae60',
+         messagePhoto || 'PHOTO  ->  ECRAN SPECTATEUR', false);
+
   ctx.font = 'bold 16px sans-serif';
   bouton(Z.replacer, anchorPlaced ? '#2c5aa0' : '#ff8800',
          anchorPlaced ? 'REPLACER LA VOITURE' : 'VISEZ ET APPUYEZ', false);
@@ -213,7 +347,9 @@ function dessinerPanneau() {
   // Ligne d'info
   ctx.fillStyle = '#777'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(actions.length + ' action(s)' +
-               (refaire.length ? '  -  ' + refaire.length + ' a retablir' : ''), PW / 2, 520);
+               (refaire.length ? '  -  ' + refaire.length + ' a retablir' : '') +
+               (canalPret ? '   -   spectateur connecte' : '   -   spectateur hors ligne'),
+               PW / 2, 572);
 
   tex.needsUpdate = true;
 }
@@ -679,6 +815,7 @@ function actionPanneau(cle) {
     case 'annuler': annuler(); break;
     case 'refaire': retablir(); break;
     case 'effacer': toutEffacer(); break;
+    case 'photo':   prendrePhoto(); break;
     case 'replacer': replacer(); break;
     case 'quitter':  quitterAR(); break;
   }
@@ -806,6 +943,15 @@ renderer.setAnimationLoop(function (time, frame) {
 
   var dt = lastTime ? Math.min((time - lastTime) / 1000, 0.1) : 0;
   lastTime = time;
+
+  // Pose de la tete : sert a prendre la photo sous l'angle exact du joueur
+  if (frame) {
+    try {
+      var rs = renderer.xr.getReferenceSpace();
+      var vpose = rs ? frame.getViewerPose(rs) : null;
+      if (vpose) { teteMatrice.fromArray(vpose.transform.matrix); teteConnue = true; }
+    } catch (e) {}
+  }
 
   // --- Phase de placement : hit-test sur la table ---
   if (frame && !anchorPlaced) {
@@ -940,6 +1086,9 @@ renderer.setAnimationLoop(function (time, frame) {
 
   if (panneauSale) dessinerPanneau();
   renderer.render(scene, camera);
+
+  // Vue en direct vers l'ecran spectateur (apres le rendu, ~1 image / 2,5 s)
+  if (anchorPlaced && carPret) diffuserLive(false);
 });
 
 // ============================================================================
@@ -989,5 +1138,8 @@ document.getElementById('btnCommencer').addEventListener('click', function () {
     status.textContent = 'Erreur AR: ' + e.message;
   });
 });
+
+// --- Connexion a l'ecran spectateur ---
+initDiffusion();
 
 }); // fin window.addEventListener('load', ...)

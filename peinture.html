@@ -70,7 +70,7 @@
     <div id="status">Chargement...</div>
     <div id="errbox"></div>
     <a class="retour" href="index.html">&#8592; Retour au menu</a>
-    <div id="version">v7.0.2</div>
+    <div id="version">v7.1.0</div>
   </div>
   <canvas id="c"></canvas>
 
@@ -87,8 +87,10 @@
 
   <script src="three.min.js"></script>
   <script src="GLTFLoader.js"></script>
-  <script src="DecalGeometry.js?v=7.0.2"></script>
+  <!-- Diffusion vers l'ecran spectateur (local : CDN bloque sur le reseau Quest) -->
+  <script src="supabase.min.js"></script>
+  <script src="DecalGeometry.js?v=7.1.0"></script>
   <!-- ?v= : anti-cache, a incrementer a chaque version pour forcer Wolvic a recharger -->
-  <script src="peinture.js?v=7.0.2"></script>
+  <script src="peinture.js?v=7.1.0"></script>
 </body>
 </html>
