@@ -17,7 +17,6 @@ var overlay = document.getElementById('overlay');
 var canvas  = document.getElementById('c');
 var errbox  = document.getElementById('errbox');
 
-// --- Verifications de depart ---
 if (typeof THREE === 'undefined') {
   status.textContent = 'Erreur: Three.js non charge';
   return;
@@ -50,10 +49,9 @@ dir.position.set(1, 2, 1);
 scene.add(dir);
 
 // --- Hierarchie ---
-// anchor    : pose sur la table (position + orientation du hit-test)
-//   carGroup : rotation libre de la voiture par l'utilisateur (grip)
-//     carRoot  : le modele charge
-//     decalques
+// anchor    : pose sur la table
+//   carGroup : rotation libre de la voiture (grip)
+//     carRoot + decalques
 //   panneau  : le menu flottant (ne tourne pas avec la voiture)
 var anchor = new THREE.Group();
 anchor.visible = false;
@@ -66,10 +64,12 @@ anchor.add(carGroup);
 // ============================================================================
 //  ETAT DE L'OUTIL
 // ============================================================================
-var mode      = 'remplir';   // 'remplir' | 'pinceau' | 'logo' | 'gomme'
-var couleurIdx = 2;          // index dans PALETTE
-var logoIdx    = 0;          // index dans LOGOS
-var tailleIdx  = 1;          // 0 = petit, 1 = moyen, 2 = grand
+var equipe     = '';
+var mode       = 'remplir';   // 'remplir' | 'pinceau' | 'logo' | 'gomme'
+var couleurIdx = 2;
+var logoIdx    = 0;
+var tailleIdx  = 1;           // 0 = petit, 1 = moyen, 2 = grand
+var rotationLogo = 0;         // orientation du sticker, pilotee au joystick
 
 var PALETTE = [
   0xffffff, 0x111111, 0xc0392b, 0xe74c3c, 0xe67e22, 0xf1c40f,
@@ -81,9 +81,10 @@ var LOGOS = [
   { nom: 'GMP', fichier: 'logo-gmp.png', ratio: 3827 / 2362 }
 ];
 
-var TAILLES     = ['P', 'M', 'G'];
-var TAILLE_SPRAY = [0.010, 0.020, 0.036];  // metres (voiture = 0.30 m de long)
-var TAILLE_LOGO  = [0.030, 0.050, 0.080];
+var TAILLES      = ['P', 'M', 'G'];
+// Ecart volontairement large entre les 3 crans pour que la difference saute aux yeux
+var TAILLE_SPRAY = [0.008, 0.020, 0.045];   // voiture = 0.30 m de long
+var TAILLE_LOGO  = [0.025, 0.050, 0.090];
 
 function couleurCourante() { return PALETTE[couleurIdx]; }
 
@@ -92,29 +93,34 @@ function couleurCourante() { return PALETTE[couleurIdx]; }
 //  Les zones sont declarees UNE SEULE FOIS et servent a la fois au dessin
 //  et a la detection du clic : impossible qu'ils se desynchronisent.
 // ============================================================================
-var PW = 512, PH = 430;                 // taille du canvas
-var PLANE_W = 0.5, PLANE_H = PLANE_W * PH / PW;
+var PW = 512, PH = 560;
+var PLANE_W = 0.55, PLANE_H = PLANE_W * PH / PW;
 
 var Z = {
-  remplir: { x: 8,   y: 40,  w: 118, h: 60 },
-  pinceau: { x: 134, y: 40,  w: 118, h: 60 },
-  logo:    { x: 260, y: 40,  w: 118, h: 60 },
-  gomme:   { x: 386, y: 40,  w: 118, h: 60 },
+  remplir: { x: 8,   y: 36,  w: 118, h: 56 },
+  pinceau: { x: 134, y: 36,  w: 118, h: 56 },
+  logo:    { x: 260, y: 36,  w: 118, h: 56 },
+  gomme:   { x: 386, y: 36,  w: 118, h: 56 },
 
-  logo0:   { x: 8,   y: 248, w: 246, h: 58 },
-  logo1:   { x: 262, y: 248, w: 242, h: 58 },
+  // Trois boutons de taille distincts (et non un bouton qui fait defiler :
+  // on voit d'un coup d'oeil le cran actif)
+  tailleP: { x: 8,   y: 234, w: 160, h: 52 },
+  tailleM: { x: 176, y: 234, w: 160, h: 52 },
+  tailleG: { x: 344, y: 234, w: 160, h: 52 },
 
-  annuler: { x: 8,   y: 316, w: 160, h: 50 },
-  effacer: { x: 176, y: 316, w: 160, h: 50 },
-  taille:  { x: 344, y: 316, w: 160, h: 50 },
+  logo0:   { x: 8,   y: 310, w: 246, h: 54 },
+  logo1:   { x: 262, y: 310, w: 242, h: 54 },
 
-  replacer:{ x: 8,   y: 372, w: 246, h: 50 },
-  quitter: { x: 262, y: 372, w: 242, h: 50 }
+  annuler: { x: 8,   y: 378, w: 160, h: 52 },
+  refaire: { x: 176, y: 378, w: 160, h: 52 },
+  effacer: { x: 344, y: 378, w: 160, h: 52 },
+
+  replacer:{ x: 8,   y: 440, w: 246, h: 52 },
+  quitter: { x: 262, y: 440, w: 242, h: 52 }
 };
 
-// Les 12 pastilles de couleur : 6 par ligne
 function zoneCouleur(i) {
-  return { x: 8 + (i % 6) * 84, y: (i < 6 ? 126 : 178), w: 76, h: 46 };
+  return { x: 8 + (i % 6) * 84, y: (i < 6 ? 116 : 164), w: 76, h: 44 };
 }
 
 var pc  = document.createElement('canvas');
@@ -132,7 +138,6 @@ function rr(c, x, y, w, h, r) {
 
 function hex(n) { return '#' + ('000000' + n.toString(16)).slice(-6); }
 
-// Dessine un bouton rectangulaire avec un libelle centre
 function bouton(z, fond, texte, actif, couleurTexte) {
   ctx.fillStyle = fond;
   rr(ctx, z.x, z.y, z.w, z.h, 10); ctx.fill();
@@ -142,7 +147,7 @@ function bouton(z, fond, texte, actif, couleurTexte) {
   }
   ctx.fillStyle = couleurTexte || '#fff';
   ctx.textAlign = 'center';
-  ctx.fillText(texte, z.x + z.w / 2, z.y + z.h / 2 + 7);
+  ctx.fillText(texte, z.x + z.w / 2, z.y + z.h / 2 + 6);
 }
 
 // Le panneau ne change que lorsqu'on appuie sur un bouton. On evite donc de le
@@ -155,9 +160,8 @@ function dessinerPanneau() {
   ctx.clearRect(0, 0, PW, PH);
   ctx.fillStyle = 'rgba(20,20,20,0.94)'; rr(ctx, 0, 0, PW, PH, 20); ctx.fill();
 
-  // Titre
   ctx.fillStyle = '#4aa3df'; ctx.font = 'bold 22px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('DECORATION', PW / 2, 28);
+  ctx.fillText(equipe ? equipe.toUpperCase() : 'DECORATION', PW / 2, 26);
 
   // --- Outils ---
   ctx.font = 'bold 16px sans-serif';
@@ -166,36 +170,50 @@ function dessinerPanneau() {
   bouton(Z.logo,    mode === 'logo'    ? '#2c5aa0' : '#333', 'LOGO',    mode === 'logo');
   bouton(Z.gomme,   mode === 'gomme'   ? '#8e2b2b' : '#333', 'GOMME',   mode === 'gomme');
 
-  // --- Palette de couleurs ---
+  // --- Palette ---
   ctx.fillStyle = '#888'; ctx.font = '14px sans-serif'; ctx.textAlign = 'left';
-  ctx.fillText('COULEUR', 10, 118);
+  ctx.fillText('COULEUR', 10, 110);
   for (var i = 0; i < PALETTE.length; i++) {
     var z = zoneCouleur(i);
     ctx.fillStyle = hex(PALETTE[i]);
     rr(ctx, z.x, z.y, z.w, z.h, 8); ctx.fill();
-    // Contour clair pour que le noir et le blanc restent visibles
     ctx.strokeStyle = (i === couleurIdx) ? '#ffee00' : '#666';
     ctx.lineWidth  = (i === couleurIdx) ? 5 : 1;
     rr(ctx, z.x, z.y, z.w, z.h, 8); ctx.stroke();
   }
 
+  // --- Taille ---
+  ctx.fillStyle = '#888'; ctx.font = '14px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('TAILLE', 10, 228);
+  ctx.font = 'bold 18px sans-serif';
+  bouton(Z.tailleP, tailleIdx === 0 ? '#2c5aa0' : '#333', 'PETIT',  tailleIdx === 0);
+  bouton(Z.tailleM, tailleIdx === 1 ? '#2c5aa0' : '#333', 'MOYEN',  tailleIdx === 1);
+  bouton(Z.tailleG, tailleIdx === 2 ? '#2c5aa0' : '#333', 'GRAND',  tailleIdx === 2);
+
   // --- Logos ---
   ctx.fillStyle = '#888'; ctx.font = '14px sans-serif'; ctx.textAlign = 'left';
-  ctx.fillText('LOGO A COLLER', 10, 240);
+  ctx.fillText('LOGO A COLLER  (joystick = tourner)', 10, 304);
   ctx.font = 'bold 18px sans-serif';
   bouton(Z.logo0, logoIdx === 0 ? '#2c5aa0' : '#333', LOGOS[0].nom, mode === 'logo' && logoIdx === 0);
   bouton(Z.logo1, logoIdx === 1 ? '#2c5aa0' : '#333', LOGOS[1].nom, mode === 'logo' && logoIdx === 1);
 
   // --- Actions ---
   ctx.font = 'bold 15px sans-serif';
-  bouton(Z.annuler, '#444', 'ANNULER', false);
+  bouton(Z.annuler, actions.length ? '#444' : '#262626', 'ANNULER', false,
+         actions.length ? '#fff' : '#666');
+  bouton(Z.refaire, refaire.length ? '#444' : '#262626', 'RETABLIR', false,
+         refaire.length ? '#fff' : '#666');
   bouton(Z.effacer, '#8e2b2b', 'TOUT EFFACER', false);
-  bouton(Z.taille,  '#444', 'TAILLE : ' + TAILLES[tailleIdx], false);
 
   ctx.font = 'bold 16px sans-serif';
   bouton(Z.replacer, anchorPlaced ? '#2c5aa0' : '#ff8800',
          anchorPlaced ? 'REPLACER LA VOITURE' : 'VISEZ ET APPUYEZ', false);
   bouton(Z.quitter, '#8e2b2b', 'QUITTER', false);
+
+  // Ligne d'info
+  ctx.fillStyle = '#777'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(actions.length + ' action(s)' +
+               (refaire.length ? '  -  ' + refaire.length + ' a retablir' : ''), PW / 2, 520);
 
   tex.needsUpdate = true;
 }
@@ -204,23 +222,21 @@ var panneau = new THREE.Mesh(
   new THREE.PlaneGeometry(PLANE_W, PLANE_H),
   new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
 );
-panneau.position.set(0, 0.45, 0);
+panneau.position.set(0, 0.5, 0);
 panneau.visible = false;
 anchor.add(panneau);
 
-// Renvoie l'identifiant de la zone touchee a partir des coordonnees UV du plan
 function zoneTouchee(uv) {
   var cx = uv.x * PW;
   var cy = (1 - uv.y) * PH;
   function dans(z) { return cx >= z.x && cx <= z.x + z.w && cy >= z.y && cy <= z.y + z.h; }
-
   for (var cle in Z) { if (dans(Z[cle])) return cle; }
   for (var i = 0; i < PALETTE.length; i++) { if (dans(zoneCouleur(i))) return 'couleur' + i; }
   return null;
 }
 
 // ============================================================================
-//  VISEUR DE PLACEMENT (avant de poser la voiture)
+//  VISEUR DE PLACEMENT
 // ============================================================================
 var reticleMatrix = new THREE.Matrix4();
 
@@ -242,7 +258,7 @@ var hitTestSourceRequested = false;
 // ============================================================================
 //  CHARGEMENT DE LA VOITURE
 // ============================================================================
-var pieces = [];   // toutes les pieces peignables (THREE.Mesh)
+var pieces = [];
 var carPret = false;
 
 function ajusterTaille(objet, tailleCible) {
@@ -263,17 +279,15 @@ function chargerVoiture() {
     // Box3.setFromObject renvoie des coordonnees MONDE : si root etait deja
     // rattache a l'ancre (posee a 1 ou 2 m dans la piece), on soustrairait un
     // decalage monde a une position locale et la voiture partirait hors de vue.
-    // Sans parent, matrixWorld = matrice locale, donc les deux reperes
-    // coincident et le calcul est juste.
     ajusterTaille(root, 0.30);
     root.updateMatrixWorld(true);
     var box = new THREE.Box3().setFromObject(root);
     var centre = new THREE.Vector3();
     box.getCenter(centre);
-    root.position.sub(centre);                         // centre horizontalement
-    root.position.y += (centre.y - box.min.y) + 0.01;  // pose le bas sur la table
+    root.position.sub(centre);
+    root.position.y += (centre.y - box.min.y) + 0.01;
 
-    carGroup.add(root);   // rattachement seulement maintenant
+    carGroup.add(root);
 
     // IMPORTANT : le materiau n0 est partage entre la carrosserie et le bloc
     // propulseur. Sans clonage, colorier la carrosserie colorierait aussi le
@@ -293,6 +307,7 @@ function chargerVoiture() {
     carGroup.updateMatrixWorld(true);
     carPret = true;
     panneau.visible = true;
+    majPanneau();
   }, undefined, function (e) {
     errbox.textContent = 'Erreur GLB: ' + e;
   });
@@ -301,11 +316,8 @@ function chargerVoiture() {
 // ============================================================================
 //  DECALQUES (peinture au pinceau + logos)
 // ============================================================================
-var decals     = [];         // pile des decalques poses (pour ANNULER)
-var MAX_DECALS = 400;        // au-dela, on supprime les plus anciens
 var ordreDecal = 0;
 
-// Texture du pinceau : un rond flou blanc, teinte ensuite par la couleur choisie.
 function creerTextureSpray() {
   var c = document.createElement('canvas');
   c.width = c.height = 64;
@@ -320,7 +332,6 @@ function creerTextureSpray() {
 }
 var texSpray = creerTextureSpray();
 
-// Un materiau par couleur (partage entre tous les decalques de cette couleur)
 var matSprayCache = {};
 function matSpray(couleur) {
   if (!matSprayCache[couleur]) {
@@ -333,7 +344,6 @@ function matSpray(couleur) {
   return matSprayCache[couleur];
 }
 
-// Un materiau par logo
 var texLoader = new THREE.TextureLoader();
 var matLogoCache = {};
 function matLogo(i) {
@@ -349,20 +359,13 @@ function matLogo(i) {
   return matLogoCache[i];
 }
 
-var orienteur = new THREE.Object3D();   // sert a calculer l'orientation du decalque
+var orienteur = new THREE.Object3D();
 
-/**
- * Colle un decalque sur la piece visee.
- * @param {Object} inter  resultat de raycaster.intersectObjects
- * @param {THREE.Material} materiau
- * @param {THREE.Vector3}  taille  dimensions de la boite de projection
- * @param {number} rotation  rotation du sticker autour de sa normale (radians)
- */
-function collerDecal(inter, materiau, taille, rotation) {
+// Fabrique la geometrie d'un decalque (coordonnees MONDE) sans creer de mesh.
+function geoDecal(inter, taille, rotation) {
   var mesh = inter.object;
   if (!mesh.isMesh || !inter.face) return null;
 
-  // Orientation : le decalque regarde dans le sens de la normale de la surface
   var n = inter.face.normal.clone();
   n.transformDirection(mesh.matrixWorld);
 
@@ -376,14 +379,54 @@ function collerDecal(inter, materiau, taille, rotation) {
   } catch (e) {
     return null;
   }
-  // Rien n'a ete decoupe (on a vise le bord) : inutile de creer un mesh vide
+  // Rien n'a ete decoupe (on a vise le bord) : inutile de garder une geometrie vide
   if (!geo.attributes.position || geo.attributes.position.count === 0) {
     geo.dispose();
     return null;
   }
+  return geo;
+}
+
+// Fusionne plusieurs geometries de decalques en une seule.
+// Toutes sont en coordonnees MONDE, donc concatener les attributs suffit.
+// C'est ce qui permet qu'un trace de 300 taches ne coute qu'UN seul appel de
+// rendu au lieu de 300 - et donc que la peinture ne soit plus jamais effacee.
+function fusionner(geos) {
+  var total = 0, i;
+  for (i = 0; i < geos.length; i++) total += geos[i].attributes.position.count;
+
+  var pos = new Float32Array(total * 3);
+  var nor = new Float32Array(total * 3);
+  var uv  = new Float32Array(total * 2);
+  var o3 = 0, o2 = 0;
+
+  for (i = 0; i < geos.length; i++) {
+    var g = geos[i];
+    pos.set(g.attributes.position.array, o3);
+    nor.set(g.attributes.normal.array,   o3);
+    uv.set(g.attributes.uv.array,        o2);
+    o3 += g.attributes.position.count * 3;
+    o2 += g.attributes.position.count * 2;
+  }
+
+  var out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal',   new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('uv',       new THREE.BufferAttribute(uv,  2));
+  return out;
+}
+
+// Cree le mesh d'un ensemble de geometries fusionnees et le rattache a la voiture.
+// La fusion RECOPIE toujours les donnees : les geometries sources peuvent donc
+// etre liberees sans risque, y compris quand il n'y en a qu'une seule.
+function poserMesh(geos, materiau) {
+  if (!geos.length) return null;
+  var geo = fusionner(geos);
+  geos.forEach(function (g) { g.dispose(); });
 
   var m = new THREE.Mesh(geo, materiau);
   m.renderOrder = ++ordreDecal;
+  m.userData.decal = true;
 
   // La geometrie est en coordonnees MONDE : on ajoute a la scene sans
   // transformation, puis .attach() la rattache a la voiture en conservant
@@ -391,52 +434,91 @@ function collerDecal(inter, materiau, taille, rotation) {
   scene.add(m);
   carGroup.attach(m);
 
-  // Memorise le centre (repere carGroup) pour la gomme
   geo.computeBoundingSphere();
   var c = geo.boundingSphere.center.clone();
   m.updateMatrixWorld(true);
   m.userData.centre = c.applyMatrix4(m.matrix);
-
-  decals.push(m);
-  if (decals.length > MAX_DECALS) supprimerDecal(decals.shift());
+  m.userData.rayon  = geo.boundingSphere.radius;
   return m;
 }
 
-function supprimerDecal(m) {
-  if (!m) return;
-  carGroup.remove(m);
-  if (m.geometry) m.geometry.dispose();   // le materiau est partage : on le garde
+// ============================================================================
+//  HISTORIQUE : ANNULER / RETABLIR
+//  Une "action" = un trace complet, un sticker, un remplissage ou un coup de
+//  gomme. Le plafond ne porte QUE sur la memoire d'annulation : les meshes
+//  eux-memes ne sont jamais supprimes, donc la peinture ne disparait jamais.
+// ============================================================================
+var actions   = [];    // pile des actions annulables
+var refaire   = [];    // pile des actions retablissables
+var MAX_HISTORIQUE = 200;
+
+// Meshes temporaires affiches pendant le trace (retour visuel immediat),
+// remplaces par un unique mesh fusionne quand on relache la gachette.
+var provisoires    = [];
+var traceAffichees = 0;
+
+function nettoyerProvisoires() {
+  provisoires.forEach(function (m) { carGroup.remove(m); });
+  provisoires.length = 0;
+  traceAffichees = 0;
 }
 
-function annulerDernier() {
-  if (!decals.length) return;
-  supprimerDecal(decals.pop());
+function empiler(action) {
+  actions.push(action);
+  if (actions.length > MAX_HISTORIQUE) actions.shift();  // on oublie, on ne supprime pas
+  refaire.length = 0;    // une nouvelle action invalide la pile "retablir"
+  majPanneau();
+}
+
+function appliquerCouleur(a, versApres) {
+  var cible = versApres ? a.apres : a.avant;
+  if (Array.isArray(a.mesh.material)) a.mesh.material[a.idx].color.setHex(cible);
+  else a.mesh.material.color.setHex(cible);
+}
+
+function annuler() {
+  if (!actions.length) return;
+  var a = actions.pop();
+
+  if (a.type === 'peinture')      carGroup.remove(a.mesh);
+  else if (a.type === 'couleur')  appliquerCouleur(a, false);
+  else if (a.type === 'gomme')    a.meshes.forEach(function (m) { carGroup.add(m); });
+
+  refaire.push(a);
+  majPanneau();
+}
+
+function retablir() {
+  if (!refaire.length) return;
+  var a = refaire.pop();
+
+  if (a.type === 'peinture')      carGroup.add(a.mesh);
+  else if (a.type === 'couleur')  appliquerCouleur(a, true);
+  else if (a.type === 'gomme')    a.meshes.forEach(function (m) { carGroup.remove(m); });
+
+  actions.push(a);
+  majPanneau();
 }
 
 function toutEffacer() {
-  while (decals.length) supprimerDecal(decals.pop());
-  // Remet aussi les couleurs d'origine
+  // Retire tous les decalques (tout ce qui n'est pas une piece de la voiture)
+  nettoyerProvisoires();
+  for (var i = carGroup.children.length - 1; i >= 0; i--) {
+    var o = carGroup.children[i];
+    if (o.userData && o.userData.decal) {
+      carGroup.remove(o);
+      if (o.geometry) o.geometry.dispose();
+    }
+  }
   pieces.forEach(function (o) {
     var orig = o.userData.couleursOrigine;
     if (!orig) return;
-    if (Array.isArray(o.material)) {
-      o.material.forEach(function (m, i) { m.color.setHex(orig[i]); });
-    } else {
-      o.material.color.setHex(orig[0]);
-    }
+    if (Array.isArray(o.material)) o.material.forEach(function (m, i) { m.color.setHex(orig[i]); });
+    else o.material.color.setHex(orig[0]);
   });
-}
-
-// Efface les decalques proches du point vise
-function gommer(inter) {
-  var p = carGroup.worldToLocal(inter.point.clone());
-  var rayon = TAILLE_SPRAY[tailleIdx] * 1.8;
-  for (var i = decals.length - 1; i >= 0; i--) {
-    if (decals[i].userData.centre && decals[i].userData.centre.distanceTo(p) < rayon) {
-      supprimerDecal(decals[i]);
-      decals.splice(i, 1);
-    }
-  }
+  actions.length = 0;
+  refaire.length = 0;
+  majPanneau();
 }
 
 // ============================================================================
@@ -450,11 +532,10 @@ function rayonDe(ctrl) {
   tempMatrix.identity().extractRotation(ctrl.matrixWorld);
   raycaster.ray.origin.setFromMatrixPosition(ctrl.matrixWorld);
   raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-  raycaster.far = 3;   // evite de peindre une voiture visee depuis l'autre bout de la piece
+  raycaster.far = 3;
   return raycaster;
 }
 
-// Curseur circulaire pose sur la surface visee (montre la taille du pinceau)
 var curseur = new THREE.Mesh(
   new THREE.RingGeometry(0.4, 0.5, 28),
   new THREE.MeshBasicMaterial({ color: 0xffee00, side: THREE.DoubleSide,
@@ -464,9 +545,52 @@ curseur.renderOrder = 9999;
 curseur.visible = false;
 scene.add(curseur);
 
+// Apercu du sticker avant de le coller : un decalque translucide recalcule
+// seulement quand on bouge assez ou qu'on tourne le joystick.
+var apercu = null;
+var apercuPos = new THREE.Vector3();
+var apercuRot = -999;
+var apercuValide = false;
+
+var matApercuCache = {};
+function matApercu(i) {
+  if (!matApercuCache[i]) {
+    var base = matLogo(i);
+    matApercuCache[i] = new THREE.MeshBasicMaterial({
+      map: base.map, transparent: true, opacity: 0.55,
+      depthTest: false, depthWrite: false
+    });
+  }
+  return matApercuCache[i];
+}
+
+function effacerApercu() {
+  if (apercu) { carGroup.remove(apercu); apercu.geometry.dispose(); apercu = null; }
+  apercuValide = false;
+}
+
+function majApercu(inter) {
+  var L = TAILLE_LOGO[tailleIdx];
+  // Profondeur juste suffisante pour mordre dans la carrosserie courbe, sans
+  // traverser toute la voiture (ce qui collerait aussi le logo en dessous).
+  var prof = Math.max(L * 0.5, 0.025);
+  var taille = new THREE.Vector3(L * LOGOS[logoIdx].ratio, L, prof);
+
+  var geo = geoDecal(inter, taille, rotationLogo);
+  effacerApercu();
+  if (!geo) return;
+
+  apercu = new THREE.Mesh(geo, matApercu(logoIdx));
+  apercu.renderOrder = 10000;
+  scene.add(apercu);
+  carGroup.attach(apercu);
+  apercuPos.copy(inter.point);
+  apercuRot = rotationLogo;
+  apercuValide = true;
+}
+
 controllers.forEach(function (ctrl, idx) {
   scene.add(ctrl);
-  // Le rayon de visee
   var geoL = new THREE.BufferGeometry().setFromPoints(
     [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
   var ligne = new THREE.Line(geoL, new THREE.LineBasicMaterial({
@@ -479,14 +603,17 @@ controllers.forEach(function (ctrl, idx) {
 // ============================================================================
 //  ACTIONS
 // ============================================================================
-var peintureEnCours = -1;              // index de la manette qui peint
+var peintureEnCours = -1;
 var dernierDab      = new THREE.Vector3();
 var aDejaDab        = false;
+var traceGeos       = [];    // geometries accumulees pendant le trace courant
+var traceMat        = null;
+var gommeLot        = [];    // decalques effaces pendant le coup de gomme courant
 
 function replacer() {
   anchorPlaced = false;
   preview.visible = true;
-  majPanneau();   // le bouton redevient "VISEZ ET APPUYEZ"
+  majPanneau();
 }
 
 function quitterAR() {
@@ -496,93 +623,122 @@ function quitterAR() {
   } catch (e) {}
 }
 
-// Applique la couleur courante a la piece visee
 function remplirPiece(inter) {
   var o = inter.object;
   if (!o.isMesh) return;
+  var idx = 0, avant;
   if (Array.isArray(o.material)) {
-    // Modele multi-materiaux : on ne colore que le sous-groupe touche
-    var mi = (inter.face && inter.face.materialIndex) || 0;
-    if (o.material[mi]) o.material[mi].color.setHex(couleurCourante());
+    idx = (inter.face && inter.face.materialIndex) || 0;
+    if (!o.material[idx]) return;
+    avant = o.material[idx].color.getHex();
   } else {
-    o.material.color.setHex(couleurCourante());
+    avant = o.material.color.getHex();
+  }
+  var apres = couleurCourante();
+  if (avant === apres) return;
+
+  var a = { type: 'couleur', mesh: o, idx: idx, avant: avant, apres: apres };
+  appliquerCouleur(a, true);
+  empiler(a);
+}
+
+// Efface les decalques proches du point vise (les meshes sont conserves pour
+// pouvoir annuler le coup de gomme)
+function gommer(inter) {
+  var p = carGroup.worldToLocal(inter.point.clone());
+  var rayon = TAILLE_SPRAY[tailleIdx] * 1.8;
+  for (var i = carGroup.children.length - 1; i >= 0; i--) {
+    var o = carGroup.children[i];
+    if (!o.userData || !o.userData.decal || o.userData.centre === undefined) continue;
+    if (o.userData.centre.distanceTo(p) < rayon + (o.userData.rayon || 0)) {
+      carGroup.remove(o);
+      gommeLot.push(o);
+    }
   }
 }
 
-// Traite l'appui sur un bouton du panneau
 function actionPanneau(cle) {
   if (cle === null) return;
-  majPanneau();   // un bouton a ete presse : le panneau doit etre redessine
+  majPanneau();
 
   if (cle.indexOf('couleur') === 0) {
     couleurIdx = parseInt(cle.slice(7), 10);
-    // Choisir une couleur en mode LOGO ou GOMME bascule vers la peinture
     if (mode === 'logo' || mode === 'gomme') mode = 'remplir';
+    effacerApercu();
     return;
   }
 
   switch (cle) {
-    case 'remplir': case 'pinceau': case 'gomme': mode = cle; break;
+    case 'remplir': case 'pinceau': case 'gomme': mode = cle; effacerApercu(); break;
     case 'logo':  mode = 'logo'; break;
-    case 'logo0': logoIdx = 0; mode = 'logo'; break;
-    case 'logo1': logoIdx = 1; mode = 'logo'; break;
-    case 'annuler': annulerDernier(); break;
+    case 'logo0': logoIdx = 0; mode = 'logo'; effacerApercu(); break;
+    case 'logo1': logoIdx = 1; mode = 'logo'; effacerApercu(); break;
+    case 'tailleP': tailleIdx = 0; effacerApercu(); break;
+    case 'tailleM': tailleIdx = 1; effacerApercu(); break;
+    case 'tailleG': tailleIdx = 2; effacerApercu(); break;
+    case 'annuler': annuler(); break;
+    case 'refaire': retablir(); break;
     case 'effacer': toutEffacer(); break;
-    case 'taille':  tailleIdx = (tailleIdx + 1) % TAILLES.length; break;
     case 'replacer': replacer(); break;
     case 'quitter':  quitterAR(); break;
   }
 }
 
-// Une action de decoration sur la voiture (un appui, ou un point du trace)
-function agirSurVoiture(inter) {
-  if (mode === 'remplir') {
-    remplirPiece(inter);
-  } else if (mode === 'pinceau') {
-    var s = TAILLE_SPRAY[tailleIdx];
-    collerDecal(inter, matSpray(couleurCourante()),
-                new THREE.Vector3(s, s, s), Math.random() * Math.PI * 2);
-  } else if (mode === 'logo') {
-    var L = TAILLE_LOGO[tailleIdx];
-    // On respecte les proportions du logo, et une profondeur suffisante
-    // pour bien mordre dans la carrosserie courbe.
-    collerDecal(inter, matLogo(logoIdx),
-                new THREE.Vector3(L * LOGOS[logoIdx].ratio, L, Math.max(L, 0.05)), 0);
-  } else if (mode === 'gomme') {
-    gommer(inter);
-  }
+// Une tache de peinture pendant un trace
+function ajouterDab(inter) {
+  var s = TAILLE_SPRAY[tailleIdx];
+  var geo = geoDecal(inter, new THREE.Vector3(s, s, s), Math.random() * Math.PI * 2);
+  if (geo) traceGeos.push(geo);
 }
 
 controllers.forEach(function (ctrl, idx) {
 
   ctrl.addEventListener('selectstart', function () {
-    // 1er appui : poser la voiture sur la table
     if (!anchorPlaced) {
-      anchor.visible = true;
-      anchorPlaced   = true;
+      anchor.visible  = true;
+      anchorPlaced    = true;
       preview.visible = false;
-      majPanneau();   // le bouton devient "REPLACER LA VOITURE"
+      majPanneau();
       return;
     }
     if (!carPret) return;
 
     var ray = rayonDe(controllers[idx]);
 
-    // Le panneau est prioritaire sur la voiture
     var hitsP = ray.intersectObject(panneau, false);
     if (hitsP.length && hitsP[0].uv) {
       actionPanneau(zoneTouchee(hitsP[0].uv));
       return;
     }
 
-    // Sinon : on decore la voiture
     var hits = ray.intersectObjects(pieces, false);
     if (!hits.length) return;
 
-    agirSurVoiture(hits[0]);
+    if (mode === 'remplir') {
+      remplirPiece(hits[0]);
 
-    // En mode pinceau/gomme, on continue tant que la gachette est tenue
-    if (mode === 'pinceau' || mode === 'gomme') {
+    } else if (mode === 'logo') {
+      // On colle l'apercu tel qu'il est affiche
+      var L = TAILLE_LOGO[tailleIdx];
+      var prof = Math.max(L * 0.5, 0.025);
+      var geo = geoDecal(hits[0],
+                  new THREE.Vector3(L * LOGOS[logoIdx].ratio, L, prof), rotationLogo);
+      if (geo) {
+        var m = poserMesh([geo], matLogo(logoIdx));
+        if (m) empiler({ type: 'peinture', mesh: m });
+      }
+
+    } else if (mode === 'pinceau') {
+      traceGeos = [];
+      traceMat  = matSpray(couleurCourante());
+      ajouterDab(hits[0]);
+      peintureEnCours = idx;
+      dernierDab.copy(hits[0].point);
+      aDejaDab = true;
+
+    } else if (mode === 'gomme') {
+      gommeLot = [];
+      gommer(hits[0]);
       peintureEnCours = idx;
       dernierDab.copy(hits[0].point);
       aDejaDab = true;
@@ -590,13 +746,24 @@ controllers.forEach(function (ctrl, idx) {
   });
 
   ctrl.addEventListener('selectend', function () {
-    if (peintureEnCours === idx) {
-      peintureEnCours = -1;
-      aDejaDab = false;
+    if (peintureEnCours !== idx) return;
+    peintureEnCours = -1;
+    aDejaDab = false;
+
+    if (mode === 'pinceau' && traceGeos.length) {
+      // On retire d'abord les meshes provisoires : ils partagent les geometries
+      // que poserMesh va fusionner puis liberer.
+      nettoyerProvisoires();
+      // Tout le trace devient UN seul mesh : 1 appel de rendu, 1 seule annulation
+      var m = poserMesh(traceGeos, traceMat);
+      traceGeos = [];
+      if (m) empiler({ type: 'peinture', mesh: m });
+    } else if (mode === 'gomme' && gommeLot.length) {
+      empiler({ type: 'gomme', meshes: gommeLot });
+      gommeLot = [];
     }
   });
 
-  // Gachette laterale (grip) : faire tourner la voiture
   ctrl.addEventListener('squeezestart', function () {
     if (!anchorPlaced) return;
     rotationManette = idx;
@@ -613,12 +780,32 @@ controllers.forEach(function (ctrl, idx) {
 var rotationManette  = -1;
 var rotationDernierX = 0;
 
+// Lit l'axe horizontal du joystick (Quest : axes[2]). Sert a tourner le sticker.
+function joystickX() {
+  try {
+    var s = renderer.xr.getSession();
+    if (!s) return 0;
+    var srcs = s.inputSources;
+    for (var i = 0; i < srcs.length; i++) {
+      var gp = srcs[i].gamepad;
+      if (!gp || !gp.axes) continue;
+      var v = (gp.axes.length >= 4) ? gp.axes[2] : gp.axes[0];
+      if (Math.abs(v) > 0.15) return v;    // zone morte
+    }
+  } catch (e) {}
+  return 0;
+}
+
 // ============================================================================
 //  BOUCLE DE RENDU
 // ============================================================================
 var pTmp = new THREE.Vector3();
+var lastTime = 0;
 
 renderer.setAnimationLoop(function (time, frame) {
+
+  var dt = lastTime ? Math.min((time - lastTime) / 1000, 0.1) : 0;
+  lastTime = time;
 
   // --- Phase de placement : hit-test sur la table ---
   if (frame && !anchorPlaced) {
@@ -670,14 +857,22 @@ renderer.setAnimationLoop(function (time, frame) {
     rotationDernierX = pTmp.x;
   }
 
+  // --- Joystick : orientation du sticker ---
+  if (mode === 'logo') {
+    var jx = joystickX();
+    if (jx) rotationLogo += jx * dt * 2.5;
+  }
+
   // --- Le panneau fait toujours face au regard ---
   if (anchor.visible && panneau.visible) {
     camera.getWorldPosition(pTmp);
     panneau.lookAt(pTmp);
   }
 
-  // --- Visee : longueur du rayon, curseur, peinture continue ---
+  // --- Visee : longueur du rayon, curseur, apercu, trace continu ---
   curseur.visible = false;
+  var apercuAJour = false;
+
   for (var i = 0; i < 2; i++) {
     var ctrl = controllers[i];
     if (!ctrl.userData.ligne) continue;
@@ -688,36 +883,59 @@ renderer.setAnimationLoop(function (time, frame) {
       var hp = ray.intersectObject(panneau, false);
       var hv = ray.intersectObjects(pieces, false);
 
-      // Le plus proche des deux determine la longueur du rayon
       var dP = hp.length ? hp[0].distance : Infinity;
       var dV = hv.length ? hv[0].distance : Infinity;
       longueur = Math.min(dP, dV, 1.5);
 
-      // Curseur sur la voiture (si la voiture est plus proche que le panneau)
       if (dV < dP) {
-        var t = (mode === 'logo') ? TAILLE_LOGO[tailleIdx] : TAILLE_SPRAY[tailleIdx];
-        if (mode === 'gomme')   t = TAILLE_SPRAY[tailleIdx] * 1.8;
-        if (mode === 'remplir') t = 0.012;   // simple point de visee
-        curseur.position.copy(hv[0].point);
-        var nn = hv[0].face.normal.clone();
-        nn.transformDirection(hv[0].object.matrixWorld);
-        curseur.lookAt(hv[0].point.clone().add(nn));
-        curseur.scale.setScalar(t);
-        curseur.material.color.setHex(mode === 'gomme' ? 0xff4444 : couleurCourante());
-        curseur.visible = true;
+        // Apercu du sticker (recalcule seulement si on a bouge ou tourne)
+        if (mode === 'logo') {
+          var bouge = !apercuValide || hv[0].point.distanceTo(apercuPos) > 0.003;
+          var tourne = Math.abs(rotationLogo - apercuRot) > 0.02;
+          if (bouge || tourne) majApercu(hv[0]);
+          apercuAJour = true;
+        } else {
+          var t = TAILLE_SPRAY[tailleIdx];
+          if (mode === 'gomme')   t = TAILLE_SPRAY[tailleIdx] * 1.8;
+          if (mode === 'remplir') t = 0.012;
+          curseur.position.copy(hv[0].point);
+          var nn = hv[0].face.normal.clone();
+          nn.transformDirection(hv[0].object.matrixWorld);
+          curseur.lookAt(hv[0].point.clone().add(nn));
+          curseur.scale.setScalar(t);
+          curseur.material.color.setHex(mode === 'gomme' ? 0xff4444 : couleurCourante());
+          curseur.visible = true;
+        }
       }
 
       // Trace continu : nouvelle tache seulement si on a assez bouge
       if (peintureEnCours === i && hv.length) {
         var pas = TAILLE_SPRAY[tailleIdx] * 0.4;
         if (!aDejaDab || hv[0].point.distanceTo(dernierDab) > pas) {
-          agirSurVoiture(hv[0]);
+          if (mode === 'pinceau')    ajouterDab(hv[0]);
+          else if (mode === 'gomme') gommer(hv[0]);
           dernierDab.copy(hv[0].point);
           aDejaDab = true;
         }
       }
     }
     ctrl.userData.ligne.scale.z = longueur;
+  }
+
+  // Le sticker n'est plus vise : on retire l'apercu
+  if (!apercuAJour && apercu) effacerApercu();
+
+  // Retour visuel immediat pendant le trace : chaque nouvelle tache est
+  // affichee telle quelle, en attendant la fusion au relachement.
+  if (peintureEnCours >= 0 && mode === 'pinceau' && traceGeos.length > traceAffichees) {
+    for (var k = traceAffichees; k < traceGeos.length; k++) {
+      var mm = new THREE.Mesh(traceGeos[k], traceMat);
+      mm.renderOrder = ++ordreDecal;
+      scene.add(mm);
+      carGroup.attach(mm);
+      provisoires.push(mm);
+    }
+    traceAffichees = traceGeos.length;
   }
 
   if (panneauSale) dessinerPanneau();
@@ -729,8 +947,12 @@ renderer.setAnimationLoop(function (time, frame) {
 // ============================================================================
 document.getElementById('btnCommencer').addEventListener('click', function () {
 
-  // Remise a zero complete
+  var nom = (document.getElementById('inputEquipe').value || '').trim();
+  if (!nom) { status.textContent = 'Entrez le nom de votre equipe !'; return; }
+  equipe = nom;
+
   toutEffacer();
+  effacerApercu();
   while (carGroup.children.length) carGroup.remove(carGroup.children[0]);
   pieces = [];
   carPret = false;
@@ -744,6 +966,10 @@ document.getElementById('btnCommencer').addEventListener('click', function () {
   mode = 'remplir';
   peintureEnCours = -1;
   rotationManette = -1;
+  rotationLogo = 0;
+  traceGeos = [];
+  provisoires = [];
+  traceAffichees = 0;
   majPanneau();
 
   navigator.xr.requestSession('immersive-ar', {

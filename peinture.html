@@ -34,6 +34,12 @@
       padding: 14px 18px; margin: 6px 0 14px; max-width: 380px;
     }
     #aide b { color: #fff; }
+    input[type="text"] {
+      font-size: 20px; padding: 12px 16px; border-radius: 10px;
+      border: 2px solid #444; background: #1a1a1a; color: white;
+      width: 260px; text-align: center; margin: 0 auto 14px; display: block;
+    }
+    input:focus { border-color: #27ae60; outline: none; }
     .retour { display: inline-block; margin-top: 16px; font-size: 13px;
               color: #4aa3df; text-decoration: none; }
     #version { position: fixed; bottom: 8px; left: 0; right: 0; text-align: center;
@@ -58,11 +64,13 @@
       <b>4.</b> La <b>gachette laterale (grip)</b> fait tourner la voiture.
     </div>
 
+    <p>Nom de votre equipe :</p>
+    <input id="inputEquipe" type="text" maxlength="20" placeholder="Votre equipe..."/>
     <button class="btn btn-start" id="btnCommencer">Entrer en AR</button>
     <div id="status">Chargement...</div>
     <div id="errbox"></div>
     <a class="retour" href="index.html">&#8592; Retour au menu</a>
-    <div id="version">v7.0.1</div>
+    <div id="version">v7.0.2</div>
   </div>
   <canvas id="c"></canvas>
 
@@ -79,8 +87,8 @@
 
   <script src="three.min.js"></script>
   <script src="GLTFLoader.js"></script>
-  <script src="DecalGeometry.js?v=7.0.1"></script>
+  <script src="DecalGeometry.js?v=7.0.2"></script>
   <!-- ?v= : anti-cache, a incrementer a chaque version pour forcer Wolvic a recharger -->
-  <script src="peinture.js?v=7.0.1"></script>
+  <script src="peinture.js?v=7.0.2"></script>
 </body>
 </html>
